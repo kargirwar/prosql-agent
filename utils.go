@@ -35,3 +35,16 @@ func echo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
+
+
+func mw(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Access-Control-Allow-Origin", "https://dev.prosql.io")
+        w.Header().Set("Content-Type", "application/json")
+
+        if r.Method == http.MethodOptions {
+            return
+        }
+        next.ServeHTTP(w, r)
+    })
+}
