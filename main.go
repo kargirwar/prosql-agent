@@ -28,7 +28,8 @@ func main() {
 	}
 	str, _ := json.Marshal(res)
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "https://dev.prosql.io")
 		w.Header().Set("Access-Control-Allow-Headers", "*")
 		fmt.Fprintf(w, string(str))
 	})
