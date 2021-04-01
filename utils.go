@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	_ "fmt"
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
@@ -34,15 +34,4 @@ func echo(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-}
-
-func ping(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Access-Control-Allow-Origin", "https://dev.prosql.io")
-    w.Header().Set("Content-Type", "application/json")
-
-    if r.Method == http.MethodOptions {
-        return
-    }
-
-	fmt.Fprintf(w, `{"status":"ok"}`)
 }
