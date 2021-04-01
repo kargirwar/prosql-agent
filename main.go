@@ -1,37 +1,52 @@
 package main
 
 import (
-	"encoding/json"
+	"log"
 	"fmt"
-	"github.com/denisbrodbeck/machineid"
-	log "github.com/sirupsen/logrus"
 	"net/http"
+	"github.com/gorilla/websocket"
+	"github.com/gorilla/mux"
 )
 
-const APP_NAME = "local-server"
-const VERSION = "1.0"
+var upgrader = websocket.Upgrader{
+    CheckOrigin: func(r *http.Request) bool {
+        return true
+    },
+} 
 
-type response struct {
-	Status string `json:"status"`
-	Id     string `json:"id"`
+func echo(w http.ResponseWriter, r *http.Request) {
+	c, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Print("upgrade:", err)
+		return
+	}
+	defer c.Close()
+	for {
+		mt, message, err := c.ReadMessage()
+		if err != nil {
+			log.Println("read:", err)
+			break
+		}
+		log.Printf("recv: %s", message)
+		err = c.WriteMessage(mt, message)
+		if err != nil {
+			log.Println("write:", err)
+			break
+		}
+	}
+}
+
+func ping(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "https://dev.prosql.io")
+	w.Header().Set("Access-Control-Allow-Headers", "*")
+	fmt.Fprintf(w, `{"status":"ok"}`)
 }
 
 func main() {
-	id, err := machineid.ProtectedID(APP_NAME)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	res := &response{
-		Status: "ok",
-		Id:     id,
-	}
-	str, _ := json.Marshal(res)
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "https://dev.prosql.io")
-		w.Header().Set("Access-Control-Allow-Headers", "*")
-		fmt.Fprintf(w, string(str))
-	})
-	http.ListenAndServe(":23890", nil)
+    r := mux.NewRouter()
+    r.HandleFunc("/echo", echo)
+    r.HandleFunc("/ping", ping)
+    http.Handle("/", r)
+	log.Fatal(http.ListenAndServe(":23890", nil))
 }
