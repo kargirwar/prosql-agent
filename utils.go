@@ -6,6 +6,7 @@ import (
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
+    "errors"
 )
 
 var upgrader = websocket.Upgrader{
@@ -73,6 +74,11 @@ func sendSuccess(w http.ResponseWriter, data interface{}) {
 		Status: "ok",
 		Data:   data,
 	}
-	str, _ := json.Marshal(res)
+	str, err := json.Marshal(res)
+    if err != nil {
+        e := errors.New("Unrecoverable error")
+        sendError(w, e)
+        return
+    }
 	fmt.Fprintf(w, string(str))
 }
