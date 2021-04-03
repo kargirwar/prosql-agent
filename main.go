@@ -10,8 +10,8 @@ import (
 
 func main() {
 	r := mux.NewRouter()
-	//r.Use(mux.CORSMethodMiddleware(r))
 	r.Use(mw)
+	r.Use(sessionDumper)
 
 	r.HandleFunc("/echo", echo)
 	r.HandleFunc("/ping", ping).Methods(http.MethodGet, http.MethodPost, http.MethodOptions)

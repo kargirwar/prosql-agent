@@ -50,6 +50,15 @@ func mw(next http.Handler) http.Handler {
 	})
 }
 
+func sessionDumper(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        for k, v := range(sessions) {
+            log.Printf("id %s at %s", k, v.accessTime)
+        }
+		next.ServeHTTP(w, r)
+	})
+}
+
 func sendError(w http.ResponseWriter, err error) {
 	res := &Response{
 		Status: "error",
