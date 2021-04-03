@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -55,9 +54,7 @@ func getDsn(r *http.Request) (dsn string, err error) {
 
 	var dbName string
 	db, present := params["db"]
-	if !present || len(db) == 0 {
-		dbName = ""
-	} else {
+	if present && len(db) == 1 {
 		dbName = db[0]
 	}
 
@@ -67,16 +64,16 @@ func getDsn(r *http.Request) (dsn string, err error) {
 func ping(w http.ResponseWriter, r *http.Request) {
 	dsn, err := getDsn(r)
 	if err != nil {
-        sendError(w, err)
-        return
-    }
+		sendError(w, err)
+		return
+	}
 
 	log.Println(dsn)
 
 	var pool *sql.DB // Database connection pool.
 	pool, err = sql.Open("mysql", dsn)
 	if err != nil {
-        sendError(w, err)
+		sendError(w, err)
 		return
 	}
 	defer pool.Close()
@@ -85,27 +82,20 @@ func ping(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if err := pool.PingContext(ctx); err != nil {
-        sendError(w, err)
+		sendError(w, err)
 		return
 	}
 
-	fmt.Fprintf(w, `{"status":"ok"}`)
+	sendSuccess(w, nil)
 }
 
 func login(w http.ResponseWriter, r *http.Request) {
-	//var array = []int{1, 2, 3}
 	sessionId := uniuri.New()
-	res := &Response{
-		Status: "ok",
-		Data: struct {
-			Session string
-		}{sessionId},
-	}
-	str, _ := json.Marshal(res)
-
-	fmt.Fprintf(w, string(str))
+	sendSuccess(w, struct {
+		Session string
+	}{sessionId})
 }
 
 func check(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, `{"status":"ok"}`)
+	sendSuccess(w, nil)
 }

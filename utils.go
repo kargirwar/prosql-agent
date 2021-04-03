@@ -1,11 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
-	"encoding/json"
 )
 
 var upgrader = websocket.Upgrader{
@@ -51,10 +51,19 @@ func mw(next http.Handler) http.Handler {
 }
 
 func sendError(w http.ResponseWriter, err error) {
-    res := &Response{
-        Status: "error",
-        Msg: err.Error(),
-    }
-    str, _ := json.Marshal(res)
-    fmt.Fprintf(w, string(str))
+	res := &Response{
+		Status: "error",
+		Msg:    err.Error(),
+	}
+	str, _ := json.Marshal(res)
+	fmt.Fprintf(w, string(str))
+}
+
+func sendSuccess(w http.ResponseWriter, data interface{}) {
+	res := &Response{
+		Status: "ok",
+		Data:   data,
+	}
+	str, _ := json.Marshal(res)
+	fmt.Fprintf(w, string(str))
 }
