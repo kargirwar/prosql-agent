@@ -2,21 +2,22 @@
 package main
 
 import (
-    "encoding/json"
+    //"encoding/json"
 	"database/sql"
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"log"
+    _ "strconv"
 )
 
 const (
 	// 1745 rows
 	// columns are: value_id, entity_type_id, attribute_id, store_id, entity_id, value
-	TEST_QUERY = `SELECT * FROM users`
+	TEST_QUERY = `SELECT * FROM users order by id limit 2`
 )
 
 func main() {
-	var allrows []map[string]string
+	var result [][]string
 	//db, err := sql.Open("mysql", "magento-1-8:magento-1-8@tcp(:3306)/magento-1-8")
 	db, err := sql.Open("mysql", "server:dev-server@tcp(127.0.0.1:3306)/test-generico")
 	if err != nil {
@@ -29,32 +30,17 @@ func main() {
 	defer rows.Close()
 	columnNames, err := rows.Columns()
 	fck(err)
-	rc := NewMapStringScan(columnNames)
+	rc := NewStringStringScan(columnNames)
 
 	for rows.Next() {
 		err := rc.Update(rows)
 		fck(err)
 		cv := rc.Get()
-        allrows = append(allrows, cv)
-		//log.Printf("%#v\n\n", cv)
-	}
-
-    //for _, v := range(allrows) {
-        //for key, val := range(v) {
-            //log.Printf("%s %s\n", key, val)
-        //}
-//
-        //str, _ := json.Marshal(v)
-        //log.Printf("%s\n", str)
-//
-        //break;
-    //}
-    str, err := json.Marshal(allrows)
-    if err != nil {
-        log.Fatal(err)
-        return
+        var s = make([]string, len(cv))
+        copy(s, cv)
+        result = append(result, s)
+        log.Println(result)
     }
-    log.Printf("%s\n", str)
 }
 
 /**

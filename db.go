@@ -139,11 +139,6 @@ func check(w http.ResponseWriter, r *http.Request) {
     ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
     defer cancel()
 
-    //if err := session.pool.PingContext(ctx); err != nil {
-        //sendError(w, err)
-        //return
-    //}
-
     rows, err := session.pool.QueryContext(ctx, "select * from users")
     if err != nil {
         sendError(w, err)
@@ -169,7 +164,11 @@ func check(w http.ResponseWriter, r *http.Request) {
         }
 
         cv := rc.Get()
-        allrows = append(allrows, cv)
+        var m = make(map[string]string)
+        for k, v := range(cv) {
+            m[k] = v
+        }
+        allrows = append(allrows, m)
     }
 
     sendSuccess(w, allrows)
