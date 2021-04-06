@@ -146,7 +146,7 @@ func check(w http.ResponseWriter, r *http.Request) {
     }
 
     defer rows.Close()
-	var allrows []map[string]string
+	var allrows [][]string
 
     columnNames, err := rows.Columns()
     if err != nil {
@@ -154,7 +154,7 @@ func check(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    rc := NewMapStringScan(columnNames)
+    rc := NewStringStringScan(columnNames)
 
     for rows.Next() {
         err := rc.Update(rows)
@@ -164,10 +164,8 @@ func check(w http.ResponseWriter, r *http.Request) {
         }
 
         cv := rc.Get()
-        var m = make(map[string]string)
-        for k, v := range(cv) {
-            m[k] = v
-        }
+        var m = make([]string, len(cv))
+        copy(m, cv)
         allrows = append(allrows, m)
     }
 
@@ -238,5 +236,55 @@ func (s *mapStringScan) Update(rows *sql.Rows) error {
 }
 
 func (s *mapStringScan) Get() map[string]string {
+	return s.row
+}
+
+/**
+  using a string slice
+*/
+type stringStringScan struct {
+	// cp are the column pointers
+	cp []interface{}
+	// row contains the final result
+	row      []string
+	colCount int
+	colNames []string
+}
+
+func NewStringStringScan(columnNames []string) *stringStringScan {
+	lenCN := len(columnNames)
+	s := &stringStringScan{
+		cp:       make([]interface{}, lenCN),
+		row:      make([]string, lenCN*2),
+		colCount: lenCN,
+		colNames: columnNames,
+	}
+	j := 0
+	for i := 0; i < lenCN; i++ {
+		s.cp[i] = new(sql.RawBytes)
+		s.row[j] = s.colNames[i]
+		j = j + 2
+	}
+	return s
+}
+
+func (s *stringStringScan) Update(rows *sql.Rows) error {
+	if err := rows.Scan(s.cp...); err != nil {
+		return err
+	}
+	j := 0
+	for i := 0; i < s.colCount; i++ {
+		if rb, ok := s.cp[i].(*sql.RawBytes); ok {
+			s.row[j+1] = string(*rb)
+			*rb = nil // reset pointer to discard current value to avoid a bug
+		} else {
+			return fmt.Errorf("Cannot convert index %d column %s to type *sql.RawBytes", i, s.colNames[i])
+		}
+		j = j + 2
+	}
+	return nil
+}
+
+func (s *stringStringScan) Get() []string {
 	return s.row
 }
