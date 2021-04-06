@@ -2,11 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
-    "errors"
 )
 
 var upgrader = websocket.Upgrader{
@@ -53,17 +53,18 @@ func mw(next http.Handler) http.Handler {
 
 func sessionDumper(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        for k, v := range(sessions) {
-            log.Printf("id %s at %s", k, v.accessTime)
-        }
+		for k, v := range sessions {
+			log.Printf("id %s at %s", k, v.accessTime)
+		}
 		next.ServeHTTP(w, r)
 	})
 }
 
-func sendError(w http.ResponseWriter, err error) {
+func sendError(w http.ResponseWriter, err error, code string) {
 	res := &Response{
 		Status: "error",
 		Msg:    err.Error(),
+        ErrorCode: code,
 	}
 	str, _ := json.Marshal(res)
 	fmt.Fprintf(w, string(str))
@@ -75,10 +76,10 @@ func sendSuccess(w http.ResponseWriter, data interface{}) {
 		Data:   data,
 	}
 	str, err := json.Marshal(res)
-    if err != nil {
-        e := errors.New("Unrecoverable error")
-        sendError(w, e)
-        return
-    }
+	if err != nil {
+		e := errors.New("Unrecoverable error")
+		sendError(w, e, ERR_UNRECOVERABLE)
+		return
+	}
 	fmt.Fprintf(w, string(str))
 }
