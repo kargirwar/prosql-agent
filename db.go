@@ -11,6 +11,7 @@ import (
 	"database/sql"
 	"github.com/dchest/uniuri"
 	_ "github.com/go-sql-driver/mysql"
+    "net/url"
 )
 
 type Response struct {
@@ -128,18 +129,20 @@ func createSessionPool(dsn string, sessionId string) (err error) {
     return nil
 }
 
-func check(w http.ResponseWriter, r *http.Request) {
-    session, err := getSession(r)
+func execute(w http.ResponseWriter, r *http.Request) {
+    query, session, err := getQueryParams(r)
 
     if err != nil {
         sendError(w, err)
         return
     }
 
+    log.Println("Running : " + query)
+
     ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
     defer cancel()
 
-    rows, err := session.pool.QueryContext(ctx, "select * from users")
+    rows, err := session.pool.QueryContext(ctx, query)
     if err != nil {
         sendError(w, err)
         return
@@ -170,6 +173,39 @@ func check(w http.ResponseWriter, r *http.Request) {
     }
 
     sendSuccess(w, allrows)
+}
+
+func getQueryParams(r *http.Request) (q string, session *Session, err error) {
+    params := r.URL.Query()
+
+    sid, present := params["session-id"]
+    if !present || len(sid) == 0 {
+        e := errors.New("Session ID not provided")
+        return "", nil, e
+    }
+
+    sessionId := sid[0]
+    session, present = sessions[sessionId]
+
+    if !present {
+        e := errors.New("Invalid Session ID")
+        return "", nil, e
+    }
+
+    session.accessTime = time.Now()
+
+    query, present := params["query"]
+    if !present || len(query) == 0 {
+        e := errors.New("Query not provided")
+        return "", nil, e
+    }
+
+    q, err = url.QueryUnescape(query[0])
+    if err != nil {
+        return "", nil, err
+    }
+
+    return q, session, nil
 }
 
 func getSession(r *http.Request) (s *Session, err error) {

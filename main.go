@@ -16,7 +16,7 @@ func main() {
 	r.HandleFunc("/echo", echo)
 	r.HandleFunc("/ping", ping).Methods(http.MethodGet, http.MethodPost, http.MethodOptions)
 	r.HandleFunc("/login", login).Methods(http.MethodGet, http.MethodPost, http.MethodOptions)
-	r.HandleFunc("/check", check).Methods(http.MethodGet, http.MethodPost, http.MethodOptions)
+	r.HandleFunc("/execute", execute).Methods(http.MethodGet, http.MethodPost, http.MethodOptions)
 	http.Handle("/", r)
 
 	log.Fatal(http.ListenAndServe(":23890", nil))
