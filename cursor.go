@@ -76,9 +76,9 @@ func cursorHandler(c *cursor) {
 func handleCursorRequest(c *cursor, req *Req) *Res {
 	switch req.code {
 	case CMD_FETCH:
-        log.Printf("Handling CMD_FETCH")
-        fetchReq, _ := req.data.(FetchReq)
-		rows, err := fetch(c, fetchReq)
+		log.Printf("Handling CMD_FETCH")
+		fetchReq, _ := req.data.(FetchReq)
+		rows, err := fetchRows(c, fetchReq)
 		if err != nil {
 			return &Res{
 				code: ERROR,
@@ -86,7 +86,7 @@ func handleCursorRequest(c *cursor, req *Req) *Res {
 			}
 		}
 
-        log.Printf("Done CMD_FETCH")
+		log.Printf("Done CMD_FETCH")
 
 		var code string
 		if len(*rows) < fetchReq.n {
@@ -108,7 +108,7 @@ func handleCursorRequest(c *cursor, req *Req) *Res {
 	}
 }
 
-func fetch(c *cursor, fetchReq FetchReq) (*[][]string, error) {
+func fetchRows(c *cursor, fetchReq FetchReq) (*[][]string, error) {
 	if fetchReq.cid != c.id {
 		return nil, errors.New(ERR_INVALID_CURSOR_ID)
 	}

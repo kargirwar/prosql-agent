@@ -70,10 +70,11 @@ func sendError(w http.ResponseWriter, err error, code string) {
 	fmt.Fprintf(w, string(str))
 }
 
-func sendSuccess(w http.ResponseWriter, data interface{}) {
+func sendSuccess(w http.ResponseWriter, data interface{}, eof bool) {
 	res := &Response{
 		Status: "ok",
 		Data:   data,
+		Eof:    eof,
 	}
 	str, err := json.Marshal(res)
 	if err != nil {

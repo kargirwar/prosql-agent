@@ -9,9 +9,9 @@ import (
 
 	"context"
 	"database/sql"
-	"github.com/dchest/uniuri"
 	_ "github.com/go-sql-driver/mysql"
 	"net/url"
+	"strconv"
 )
 
 type Response struct {
@@ -19,6 +19,7 @@ type Response struct {
 	Msg       string      `json:"msg"`
 	ErrorCode string      `json:"error-code"`
 	Data      interface{} `json:"data"`
+	Eof       bool        `json:"eof"`
 }
 
 func getDsn(r *http.Request) (dsn string, err error) {
@@ -82,7 +83,7 @@ func ping(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendSuccess(w, nil)
+	sendSuccess(w, nil, false)
 }
 
 func login(w http.ResponseWriter, r *http.Request) {
@@ -92,97 +93,105 @@ func login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sessionId := uniuri.New()
-	err = createSessionPool(dsn, sessionId)
+	sid, err := NewSession("mysql", dsn)
 	if err != nil {
 		sendError(w, err, ERR_DB_ERROR)
 		return
 	}
 
+	log.Printf("sid %s\n", sid)
+
 	sendSuccess(w, struct {
-		Session string `json:"session-id"`
-	}{sessionId})
+		SessionId string `json:"session-id"`
+	}{sid}, false)
+
+	log.Printf("sendSuccess")
 }
 
 func execute(w http.ResponseWriter, r *http.Request) {
-	query, session, err := getQueryParams(r)
+	query, sid, err := getExecuteParams(r)
 
 	if err != nil {
-		if session == nil {
-			sendError(w, err, ERR_INVALID_SESSION_ID)
-			return
-		}
 		sendError(w, err, ERR_INVALID_USER_INPUT)
 		return
 	}
 
-	log.Println("Running : " + query)
+	cid, err := Execute(sid, query)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-
-	rows, err := session.pool.QueryContext(ctx, query)
 	if err != nil {
-		sendError(w, err, ERR_DB_ERROR)
+		sendError(w, err, ERR_INVALID_USER_INPUT)
 		return
 	}
 
-	defer rows.Close()
-	var allrows [][]string
-
-	columnNames, err := rows.Columns()
-	if err != nil {
-		sendError(w, err, ERR_DB_ERROR)
-		return
-	}
-
-	rc := NewStringStringScan(columnNames)
-
-	for rows.Next() {
-		err := rc.Update(rows)
-		if err != nil {
-			sendError(w, err, ERR_DB_ERROR)
-			return
-		}
-
-		cv := rc.Get()
-		var m = make([]string, len(cv))
-		copy(m, cv)
-		allrows = append(allrows, m)
-	}
-
-	sendSuccess(w, allrows)
+	sendSuccess(w, cid, false)
 }
 
-func getQueryParams(r *http.Request) (q string, session *Session, err error) {
+func fetch(w http.ResponseWriter, r *http.Request) {
+	sid, cid, n, err := getFetchParams(r)
+
+	if err != nil {
+		sendError(w, err, ERR_INVALID_USER_INPUT)
+		return
+	}
+
+	rows, eof, err := Fetch(sid, cid, n)
+
+	if err != nil {
+		sendError(w, err, ERR_DB_ERROR)
+		return
+	}
+
+	sendSuccess(w, rows, eof)
+}
+
+func getFetchParams(r *http.Request) (string, string, int, error) {
 	params := r.URL.Query()
 
 	sid, present := params["session-id"]
 	if !present || len(sid) == 0 {
 		e := errors.New("Session ID not provided")
-		return "", nil, e
+		return "", "", -1, e
 	}
 
-	sessionId := sid[0]
-	session, present = sessions[sessionId]
-
-	if !present {
-		e := errors.New("Invalid Session ID")
-		return "", nil, e
+	cid, present := params["cursor-id"]
+	if !present || len(cid) == 0 {
+		e := errors.New("Cursor ID not provided")
+		return "", "", -1, e
 	}
 
-	session.accessTime = time.Now()
+	num, present := params["num-of-rows"]
+	if !present || len(num) == 0 {
+		e := errors.New("Number of rows not provided")
+		return "", "", -1, e
+	}
+
+	n, err := strconv.Atoi(num[0])
+	if err != nil {
+		e := errors.New("Number of rows must be integer")
+		return "", "", -1, e
+	}
+	return sid[0], cid[0], n, nil
+}
+
+func getExecuteParams(r *http.Request) (string, string, error) {
+	params := r.URL.Query()
+
+	sid, present := params["session-id"]
+	if !present || len(sid) == 0 {
+		e := errors.New("Session ID not provided")
+		return "", "", e
+	}
 
 	query, present := params["query"]
 	if !present || len(query) == 0 {
 		e := errors.New("Query not provided")
-		return "", nil, e
+		return "", "", e
 	}
 
-	q, err = url.QueryUnescape(query[0])
+	q, err := url.QueryUnescape(query[0])
 	if err != nil {
-		return "", nil, err
+		return "", "", err
 	}
 
-	return q, session, nil
+	return q, sid[0], nil
 }
