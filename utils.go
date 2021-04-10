@@ -62,9 +62,9 @@ func sessionDumper(next http.Handler) http.Handler {
 
 func sendError(w http.ResponseWriter, err error, code string) {
 	res := &Response{
-		Status: "error",
-		Msg:    err.Error(),
-        ErrorCode: code,
+		Status:    "error",
+		Msg:       err.Error(),
+		ErrorCode: code,
 	}
 	str, _ := json.Marshal(res)
 	fmt.Fprintf(w, string(str))

@@ -1,11 +1,11 @@
 package main
 
 import (
+	"database/sql"
 	"errors"
+	_ "github.com/go-sql-driver/mysql"
 	"net/http"
 	"time"
-	"database/sql"
-	_ "github.com/go-sql-driver/mysql"
 )
 
 type Session struct {

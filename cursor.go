@@ -1,67 +1,147 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"time"
 
 	"context"
 	"database/sql"
+	"errors"
 	"github.com/dchest/uniuri"
 	_ "github.com/go-sql-driver/mysql"
-	"net/url"
+	"sync"
 )
 
-func execute(w http.ResponseWriter, r *http.Request) {
-	query, session, err := getQueryParams(r)
+var cmutex sync.Mutex
+
+type cursor struct {
+	id         string
+	rows       *sql.Rows
+	in         chan *Req
+	out        chan *Res
+	accessTime time.Time
+	cancel     context.CancelFunc
+}
+
+func NewCursor(s *session, query string) (*cursor, error) {
+	cmutex.Lock()
+	defer cmutex.Unlock()
+
+	c, err := createCursor(s, query)
 
 	if err != nil {
-        if session == nil {
-            sendError(w, err, ERR_INVALID_SESSION_ID)
-            return
+		return nil, err
+	}
+
+	go cursorHandler(c)
+	return c, nil
+}
+
+func createCursor(s *session, query string) (*cursor, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	rows, err := s.pool.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	var c cursor
+	c.id = uniuri.New()
+	c.in = make(chan *Req)
+	c.out = make(chan *Res)
+	c.rows = rows
+	c.cancel = cancel
+
+	return &c, nil
+}
+
+func cursorHandler(c *cursor) {
+	log.Printf("Staring cursorHandler for %s\n", c.id)
+	defer c.rows.Close()
+
+	for {
+		select {
+		case req := <-c.in:
+			res := handleCursorRequest(c, req)
+			c.out <- res
+			if res.code == ERROR || res.code == EOF {
+				//Whatever the error we should exit
+				log.Printf("Shutting down cursorHandler for %s\n", c.id)
+				break
+			}
+		}
+	}
+}
+
+func handleCursorRequest(c *cursor, req *Req) *Res {
+	switch req.code {
+	case CMD_FETCH:
+		fetchReq, _ := req.data.(FetchReq)
+		rows, err := fetch(c, fetchReq)
+		if err != nil {
+			return &Res{
+				code: ERROR,
+				data: err,
+			}
+		}
+
+        var code string
+        if len(*rows) < fetchReq.n {
+            code = EOF
+        } else {
+            code = SUCCESS
         }
-        sendError(w, err, ERR_INVALID_USER_INPUT)
-        return
+
+		return &Res{
+			code: code,
+			data: rows,
+		}
+
+	default:
+		return &Res{
+			code: ERROR,
+			data: errors.New(ERR_INVALID_CURSOR_CMD),
+		}
+	}
+}
+
+func fetch(c *cursor, fetchReq FetchReq) (*[][]string, error) {
+	if fetchReq.cid != c.id {
+		return nil, errors.New(ERR_INVALID_CURSOR_ID)
 	}
 
-	log.Println("Running : " + query)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-
-	rows, err := session.pool.QueryContext(ctx, query)
-	if err != nil {
-		sendError(w, err, ERR_DB_ERROR)
-		return
-	}
-
-	defer rows.Close()
 	var allrows [][]string
 
-	columnNames, err := rows.Columns()
+	columnNames, err := c.rows.Columns()
 	if err != nil {
-		sendError(w, err, ERR_DB_ERROR)
-		return
+		return nil, err
 	}
 
 	rc := NewStringStringScan(columnNames)
 
-	for rows.Next() {
-		err := rc.Update(rows)
+	n := 0
+	for c.rows.Next() {
+		err := rc.Update(c.rows)
 		if err != nil {
-			sendError(w, err, ERR_DB_ERROR)
-			return
+			return nil, err
 		}
 
 		cv := rc.Get()
 		var m = make([]string, len(cv))
 		copy(m, cv)
 		allrows = append(allrows, m)
+
+		n++
+		if n == fetchReq.n {
+			break
+		}
 	}
 
-	sendSuccess(w, allrows)
+	if c.rows.Err() != nil {
+		return nil, c.rows.Err()
+	}
+
+	return &allrows, nil
 }
 
 /**
