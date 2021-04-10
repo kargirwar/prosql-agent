@@ -13,6 +13,7 @@ const EOF = "eof"
 //commands
 const CMD_EXECUTE = "execute"
 const CMD_FETCH = "fetch"
+const CMD_CANCEL = "cancel"
 
 //statuses
 const SUCCESS = "success"

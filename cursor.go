@@ -56,7 +56,7 @@ func createCursor(s *session, query string) (*cursor, error) {
 }
 
 func cursorHandler(c *cursor) {
-	log.Printf("Staring cursorHandler for %s\n", c.id)
+	log.Printf("Starting cursorHandler for %s\n", c.id)
 	defer c.rows.Close()
 
 	for {
@@ -85,12 +85,12 @@ func handleCursorRequest(c *cursor, req *Req) *Res {
 			}
 		}
 
-        var code string
-        if len(*rows) < fetchReq.n {
-            code = EOF
-        } else {
-            code = SUCCESS
-        }
+		var code string
+		if len(*rows) < fetchReq.n {
+			code = EOF
+		} else {
+			code = SUCCESS
+		}
 
 		return &Res{
 			code: code,

@@ -76,12 +76,12 @@ func Execute(sid string, query string) (string, error) {
 		data: query,
 	}
 
-    res := <-s.out
-    if res.code == ERROR {
-        return "", res.data.(error)
-    }
+	res := <-s.out
+	if res.code == ERROR {
+		return "", res.data.(error)
+	}
 
-    return res.data.(string), nil
+	return res.data.(string), nil
 }
 
 //fetch n rows from session sid using cursor cid
@@ -99,17 +99,36 @@ func Fetch(sid string, cid string, n int) (*[][]string, bool, error) {
 		},
 	}
 
-    res := <-s.out
-    if res.code == ERROR {
-        return nil, false, res.data.(error)
-    }
+	res := <-s.out
+	if res.code == ERROR {
+		return nil, false, res.data.(error)
+	}
 
-    var eof bool
-    if res.code == EOF {
-        eof = true
-    }
+	var eof bool
+	if res.code == EOF {
+		eof = true
+	}
 
-    return res.data.(*[][]string), eof, nil
+	return res.data.(*[][]string), eof, nil
+}
+
+func Cancel(sid string, cid string) error {
+	s, present := sessions[sid]
+	if !present {
+		return errors.New(ERR_INVALID_SESSION_ID)
+	}
+
+	s.in <- &Req{
+		code: CMD_CANCEL,
+		data: cid,
+	}
+
+	res := <-s.out
+	if res.code == ERROR {
+		return res.data.(error)
+	}
+
+	return nil
 }
 
 func createSession(dbtype string, dsn string) (*session, error) {
@@ -169,13 +188,13 @@ func handleSessionRequest(s *session, req *Req) {
 		fetchReq, _ := req.data.(FetchReq)
 		c, present := s.cursors[fetchReq.cid]
 
-        if !present {
-            s.out <- &Res{
-                code: ERROR,
-                data: errors.New(ERR_INVALID_CURSOR_ID),
-            }
-            return
-        }
+		if !present {
+			s.out <- &Res{
+				code: ERROR,
+				data: errors.New(ERR_INVALID_CURSOR_ID),
+			}
+			return
+		}
 
 		//send fetch request to cursor
 		c.in <- req
@@ -186,5 +205,23 @@ func handleSessionRequest(s *session, req *Req) {
 			delete(s.cursors, fetchReq.cid)
 		}
 		s.out <- res
+
+	case CMD_CANCEL:
+		log.Println("Handling CMD_CANCEL")
+		cid := req.data.(string)
+		c, present := s.cursors[cid]
+
+		if !present {
+			s.out <- &Res{
+				code: ERROR,
+				data: errors.New(ERR_INVALID_CURSOR_ID),
+			}
+			return
+		}
+
+		c.cancel()
+		s.out <- &Res{
+			code: SUCCESS,
+		}
 	}
 }

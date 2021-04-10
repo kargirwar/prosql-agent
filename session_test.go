@@ -2,9 +2,10 @@ package main
 
 import (
 	"testing"
+	"time"
 )
 
-const N = 100
+const N = 2000
 
 func TestNewSession(t *testing.T) {
 	sid, err := NewSession("mysql", "server:dev-server@tcp(127.0.0.1:3306)/test-generico")
@@ -20,17 +21,26 @@ func TestNewSession(t *testing.T) {
 	}
 
 	t.Log(cid)
+	//test cancellation
+	t1 := time.NewTimer(10 * time.Second)
+	go func() {
+		<-t1.C
+		err := Cancel(sid, cid)
+		if err != nil {
+			t.Errorf("%s\n", err.Error())
+		}
+	}()
 
 	for {
 		rows, eof, err := Fetch(sid, cid, N)
 		if err != nil {
 			t.Errorf("%s\n", err.Error())
-            break
+			break
 		}
 
-        t.Logf("Received %d rows", len(*rows))
-        if eof == true {
-            break
-        }
+		t.Logf("Received %d rows", len(*rows))
+		if eof == true {
+			break
+		}
 	}
 }
