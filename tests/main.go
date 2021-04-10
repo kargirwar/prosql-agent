@@ -13,10 +13,12 @@ import (
 const (
 	// 1745 rows
 	// columns are: value_id, entity_type_id, attribute_id, store_id, entity_id, value
-	TEST_QUERY = `SELECT * FROM users order by id limit 2`
+	TEST_QUERY = `SELECT * FROM users`
 )
 
 func main() {
+    log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+    log.Println("start")
 	var result [][]string
 	//db, err := sql.Open("mysql", "magento-1-8:magento-1-8@tcp(:3306)/magento-1-8")
 	db, err := sql.Open("mysql", "server:dev-server@tcp(127.0.0.1:3306)/test-generico")
@@ -24,14 +26,17 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
+    log.Println("opened db")
 
 	rows, err := db.Query(TEST_QUERY)
 	fck(err)
 	defer rows.Close()
 	columnNames, err := rows.Columns()
 	fck(err)
+    log.Println("read columns")
 	rc := NewStringStringScan(columnNames)
 
+    log.Println("reading rows")
 	for rows.Next() {
 		err := rc.Update(rows)
 		fck(err)
@@ -39,8 +44,8 @@ func main() {
         var s = make([]string, len(cv))
         copy(s, cv)
         result = append(result, s)
-        log.Println(result)
     }
+    log.Println("end")
 }
 
 /**
