@@ -64,7 +64,7 @@ func cursorHandler(c *cursor) {
 		case req := <-c.in:
 			res := handleCursorRequest(c, req)
 			c.out <- res
-			if res.code == ERROR || res.code == EOF {
+			if res.code == ERROR || res.code == EOF || res.code == CLEANUP_DONE {
 				//Whatever the error we should exit
 				log.Printf("Shutting down cursorHandler for %s\n", c.id)
 				break
@@ -100,12 +100,17 @@ func handleCursorRequest(c *cursor, req *Req) *Res {
 			data: rows,
 		}
 
-	default:
-		return &Res{
-			code: ERROR,
-			data: errors.New(ERR_INVALID_CURSOR_CMD),
-		}
-	}
+    case CMD_CLEANUP:
+        return &Res{
+            code: CLEANUP_DONE,
+        }
+
+    default:
+        return &Res{
+            code: ERROR,
+            data: errors.New(ERR_INVALID_CURSOR_CMD),
+        }
+    }
 }
 
 func fetchRows(c *cursor, fetchReq FetchReq) (*[][]string, error) {

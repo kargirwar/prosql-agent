@@ -1,4 +1,7 @@
 package main
+import "time"
+
+const CLEANUP_INTERVAL = 20 * time.Second
 
 //error codes
 const ERR_INVALID_USER_INPUT = "invalid-user-input"
@@ -14,7 +17,9 @@ const EOF = "eof"
 const CMD_EXECUTE = "execute"
 const CMD_FETCH = "fetch"
 const CMD_CANCEL = "cancel"
+const CMD_CLEANUP = "cleanup"
 
 //statuses
 const SUCCESS = "success"
 const ERROR = "error"
+const CLEANUP_DONE = "cleanup-done"
