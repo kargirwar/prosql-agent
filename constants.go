@@ -1,7 +1,9 @@
 package main
+
 import "time"
 
-const CLEANUP_INTERVAL = 20 * time.Second
+const SESSION_CLEANUP_INTERVAL = 1 * time.Hour
+const CURSOR_CLEANUP_INTERVAL = 30 * time.Minute
 
 //error codes
 const ERR_INVALID_USER_INPUT = "invalid-user-input"

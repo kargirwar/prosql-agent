@@ -13,8 +13,9 @@ import (
 	"sync"
 )
 
-var cmutex sync.Mutex
-
+//==============================================================//
+//          cursor structs and methods
+//==============================================================//
 type cursor struct {
 	id         string
 	rows       *sql.Rows
@@ -24,10 +25,67 @@ type cursor struct {
 	cancel     context.CancelFunc
 }
 
-func NewCursor(s *session, query string) (*cursor, error) {
-	cmutex.Lock()
-	defer cmutex.Unlock()
+type cursors struct {
+	store  map[string]*cursor
+	cmutex sync.Mutex
+}
 
+func (pc *cursors) set(cid string, c *cursor) {
+	pc.cmutex.Lock()
+	defer pc.cmutex.Unlock()
+
+	pc.store[cid] = c
+}
+
+func (pc *cursors) get(cid string) (*cursor, error) {
+	pc.cmutex.Lock()
+	defer pc.cmutex.Unlock()
+
+	c, present := pc.store[cid]
+	if !present {
+		return nil, errors.New(ERR_INVALID_CURSOR_ID)
+	}
+
+	return c, nil
+}
+
+func (pc *cursors) getKeys() []string {
+	pc.cmutex.Lock()
+	defer pc.cmutex.Unlock()
+
+	keys := make([]string, len(pc.store))
+
+	i := 0
+	for k := range pc.store {
+		keys[i] = k
+		i++
+	}
+
+	return keys
+}
+
+func (pc *cursors) clear(k string) {
+	pc.cmutex.Lock()
+	defer pc.cmutex.Unlock()
+
+	_, present := pc.store[k]
+	if present {
+		delete(pc.store, k)
+	}
+}
+
+func NewCursorStore() *cursors {
+	store := make(map[string]*cursor)
+	return &cursors{
+		store: store,
+	}
+}
+
+//==============================================================//
+//          cursor structs and methods end
+//==============================================================//
+
+func NewCursor(s *session, query string) (*cursor, error) {
 	c, err := createCursor(s, query)
 
 	if err != nil {
@@ -55,6 +113,7 @@ func createCursor(s *session, query string) (*cursor, error) {
 	return &c, nil
 }
 
+//goroutine to handle a single cursor
 func cursorHandler(c *cursor) {
 	log.Printf("Starting cursorHandler for %s\n", c.id)
 	defer c.rows.Close()
@@ -100,17 +159,17 @@ func handleCursorRequest(c *cursor, req *Req) *Res {
 			data: rows,
 		}
 
-    case CMD_CLEANUP:
-        return &Res{
-            code: CLEANUP_DONE,
-        }
+	case CMD_CLEANUP:
+		return &Res{
+			code: CLEANUP_DONE,
+		}
 
-    default:
-        return &Res{
-            code: ERROR,
-            data: errors.New(ERR_INVALID_CURSOR_CMD),
-        }
-    }
+	default:
+		return &Res{
+			code: ERROR,
+			data: errors.New(ERR_INVALID_CURSOR_CMD),
+		}
+	}
 }
 
 func fetchRows(c *cursor, fetchReq FetchReq) (*[][]string, error) {
@@ -150,52 +209,6 @@ func fetchRows(c *cursor, fetchReq FetchReq) (*[][]string, error) {
 	}
 
 	return &allrows, nil
-}
-
-/**
-  using a map
-*/
-type mapStringScan struct {
-	// cp are the column pointers
-	cp []interface{}
-	// row contains the final result
-	row      map[string]string
-	colCount int
-	colNames []string
-}
-
-func NewMapStringScan(columnNames []string) *mapStringScan {
-	lenCN := len(columnNames)
-	s := &mapStringScan{
-		cp:       make([]interface{}, lenCN),
-		row:      make(map[string]string, lenCN),
-		colCount: lenCN,
-		colNames: columnNames,
-	}
-	for i := 0; i < lenCN; i++ {
-		s.cp[i] = new(sql.RawBytes)
-	}
-	return s
-}
-
-func (s *mapStringScan) Update(rows *sql.Rows) error {
-	if err := rows.Scan(s.cp...); err != nil {
-		return err
-	}
-
-	for i := 0; i < s.colCount; i++ {
-		if rb, ok := s.cp[i].(*sql.RawBytes); ok {
-			s.row[s.colNames[i]] = string(*rb)
-			*rb = nil // reset pointer to discard current value to avoid a bug
-		} else {
-			return fmt.Errorf("Cannot convert index %d column %s to type *sql.RawBytes", i, s.colNames[i])
-		}
-	}
-	return nil
-}
-
-func (s *mapStringScan) Get() map[string]string {
-	return s.row
 }
 
 /**

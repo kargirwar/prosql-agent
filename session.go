@@ -21,12 +21,12 @@ import (
 //          session structs and methods
 //==============================================================//
 type session struct {
-	id         string
-	pool       *sql.DB
-	in         chan *Req
-	out        chan *Res
-	accessTime time.Time
-	cursors    map[string]*cursor
+	id          string
+	pool        *sql.DB
+	in          chan *Req
+	out         chan *Res
+	accessTime  time.Time
+	cursorStore *cursors
 }
 
 type sessions struct {
@@ -69,13 +69,13 @@ func (ps *sessions) getKeys() []string {
 }
 
 func (ps *sessions) clear(k string) {
-    ps.smutex.Lock()
+	ps.smutex.Lock()
 	defer ps.smutex.Unlock()
 
-    _, present := ps.store[k]
-    if present {
-        delete(ps.store, k)
-    }
+	_, present := ps.store[k]
+	if present {
+		delete(ps.store, k)
+	}
 }
 
 //==============================================================//
@@ -97,37 +97,40 @@ type FetchReq struct {
 	n   int
 }
 
-var allsessions *sessions
+//==============================================================//
+//          globals
+//==============================================================//
+var sessionStore *sessions
 var ticker *time.Ticker
 
 func init() {
 	store := make(map[string]*session)
-	allsessions = &sessions{
+	sessionStore = &sessions{
 		store: store,
 	}
-	ticker = time.NewTicker(CLEANUP_INTERVAL)
-	go cleanup()
+	ticker = time.NewTicker(SESSION_CLEANUP_INTERVAL)
+	go cleanupSessions()
 }
 
-//for all sessions whose accesstime is older than CLEANUP_INTERVAL,
+//for all sessions whose accesstime is older than SESSION_CLEANUP_INTERVAL,
 //clean up active cursors if any and then delete the session itself
-func cleanup() {
+func cleanupSessions() {
 	for {
 		select {
 		case <-ticker.C:
-            log.Println("Starting cleanup")
-            keys := allsessions.getKeys()
+			log.Println("Starting cleanup")
+			keys := sessionStore.getKeys()
 			for _, k := range keys {
-                log.Println("Checking session: " + k)
-                s, _ := allsessions.get(k)
-                if s == nil {
-                    log.Println("Skipping session: " + k)
-                    continue
-                }
+				log.Println("Checking session: " + k)
+				s, _ := sessionStore.get(k)
+				if s == nil {
+					log.Println("Skipping session: " + k)
+					continue
+				}
 
 				now := time.Now()
-				if now.Sub(s.accessTime) > CLEANUP_INTERVAL {
-                    log.Println("Cleaning up session: " + k)
+				if now.Sub(s.accessTime) > SESSION_CLEANUP_INTERVAL {
+					log.Println("Cleaning up session: " + k)
 					s.in <- &Req{
 						code: CMD_CLEANUP,
 					}
@@ -139,8 +142,8 @@ func cleanup() {
 						continue
 					}
 
-					allsessions.clear(k)
-                    log.Println("Cleanup done for session: " + k)
+					sessionStore.clear(k)
+					log.Println("Cleanup done for session: " + k)
 				}
 			}
 		}
@@ -153,7 +156,7 @@ func NewSession(dbtype string, dsn string) (string, error) {
 		return "", err
 	}
 
-	allsessions.set(s.id, s)
+	sessionStore.set(s.id, s)
 
 	go sessionHandler(s)
 	return s.id, nil
@@ -162,7 +165,7 @@ func NewSession(dbtype string, dsn string) (string, error) {
 //execute a query and create a cursor for the results
 //results must be retrieved by calling fetch later with the cursor id
 func Execute(sid string, query string) (string, error) {
-	s, err := allsessions.get(sid)
+	s, err := sessionStore.get(sid)
 	if err != nil {
 		return "", err
 	}
@@ -182,7 +185,7 @@ func Execute(sid string, query string) (string, error) {
 
 //fetch n rows from session sid using cursor cid
 func Fetch(sid string, cid string, n int) (*[][]string, bool, error) {
-	s, err := allsessions.get(sid)
+	s, err := sessionStore.get(sid)
 	if err != nil {
 		return nil, false, err
 	}
@@ -209,7 +212,7 @@ func Fetch(sid string, cid string, n int) (*[][]string, bool, error) {
 }
 
 func Cancel(sid string, cid string) error {
-	s, err := allsessions.get(sid)
+	s, err := sessionStore.get(sid)
 	if err != nil {
 		return err
 	}
@@ -240,116 +243,7 @@ func createSession(dbtype string, dsn string) (*session, error) {
 	s.in = make(chan *Req)
 	s.out = make(chan *Res)
 	s.id = uniuri.New()
-	s.cursors = make(map[string]*cursor)
+	s.cursorStore = NewCursorStore()
 
 	return &s, nil
-}
-
-func sessionHandler(s *session) {
-	log.Printf("Starting handler for %s\n", s.id)
-	defer s.pool.Close()
-
-	for {
-		select {
-		case req := <-s.in:
-			handleSessionRequest(s, req)
-		}
-	}
-}
-
-func handleSessionRequest(s *session, req *Req) {
-    s.accessTime = time.Now()
-	switch req.code {
-	case CMD_EXECUTE:
-		handleExecute(s, req)
-
-	case CMD_FETCH:
-		handleFetch(s, req)
-
-	case CMD_CANCEL:
-		handleCancel(s, req)
-
-    case CMD_CLEANUP:
-		handleCleanup(s, req)
-	}
-}
-
-//send cleanup command to all the cursors
-func handleCleanup(s *session, req *Req) {
-	log.Println("Handling " + CMD_CLEANUP)
-    for _, c := range(s.cursors) {
-        c.in <- &Req{
-            code: CMD_CANCEL,
-        }
-        <-c.out
-    }
-
-    s.out <- &Res{
-        code: CLEANUP_DONE,
-    }
-}
-
-func handleExecute(s *session, req *Req) {
-	query, _ := req.data.(string)
-	log.Println("Handling " + CMD_EXECUTE + ":" + query)
-
-	c, err := NewCursor(s, query)
-	if err != nil {
-		s.out <- &Res{
-			code: ERROR,
-			data: err,
-		}
-
-		return
-	}
-
-	s.cursors[c.id] = c
-	s.out <- &Res{
-		code: SUCCESS,
-		data: c.id,
-	}
-}
-
-func handleFetch(s *session, req *Req) {
-	//just pass on to appropriate cursor and wait for results
-	fetchReq, _ := req.data.(FetchReq)
-	c, present := s.cursors[fetchReq.cid]
-
-	if !present {
-		s.out <- &Res{
-			code: ERROR,
-			data: errors.New(ERR_INVALID_CURSOR_ID),
-		}
-		return
-	}
-
-	//send fetch request to cursor
-	c.in <- req
-	res := <-c.out
-	if res.code == ERROR {
-		//if there is error the cursorHandler must have exited. No need to
-		//keep reference to it
-		delete(s.cursors, fetchReq.cid)
-	}
-	s.out <- res
-
-}
-
-func handleCancel(s *session, req *Req) {
-	log.Println("Handling CMD_CANCEL")
-	cid := req.data.(string)
-	c, present := s.cursors[cid]
-
-	if !present {
-		s.out <- &Res{
-			code: ERROR,
-			data: errors.New(ERR_INVALID_CURSOR_ID),
-		}
-		return
-	}
-
-	c.cancel()
-	s.out <- &Res{
-		code: SUCCESS,
-	}
 }
