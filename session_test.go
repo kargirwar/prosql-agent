@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"testing"
 	"time"
 )
@@ -8,7 +9,7 @@ import (
 const N = 2000
 
 func TestNewSession(t *testing.T) {
-	sid, err := NewSession("mysql", "server:dev-server@tcp(127.0.0.1:3306)/test-generico")
+	sid, err := NewSession("mysql", os.Getenv("DSN"))
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}

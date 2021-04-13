@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
+
+	"github.com/gorilla/websocket"
 )
 
 var upgrader = websocket.Upgrader{
@@ -36,6 +37,33 @@ func echo(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
+}
+
+func sessionDumper(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		keys := sessionStore.getKeys()
+		log.Printf("Found :%d sessions\n", len(keys))
+
+		for _, sk := range keys {
+			log.Printf("s: %s\n", sk)
+			s, _ := sessionStore.get(sk)
+			if s == nil {
+				log.Println("session " + sk + " is nil")
+				continue
+			}
+			ckeys := s.cursorStore.getKeys()
+			for _, ck := range ckeys {
+				c, _ := s.cursorStore.get(ck)
+				if c == nil {
+					log.Println("cursor " + ck + " is nil")
+					continue
+				}
+
+				log.Printf("    c: %s\n", ck)
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func mw(next http.Handler) http.Handler {
