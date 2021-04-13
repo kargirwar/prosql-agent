@@ -8,9 +8,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"sync"
+
 	"github.com/dchest/uniuri"
 	_ "github.com/go-sql-driver/mysql"
-	"sync"
 )
 
 //==============================================================//
@@ -119,6 +120,7 @@ func cursorHandler(c *cursor) {
 	log.Printf("Starting cursorHandler for %s\n", c.id)
 	defer c.rows.Close()
 
+loop:
 	for {
 		select {
 		case req := <-c.in:
@@ -128,7 +130,7 @@ func cursorHandler(c *cursor) {
 			if res.code == ERROR || res.code == EOF || res.code == CLEANUP_DONE {
 				//Whatever the error we should exit
 				log.Printf("Shutting down cursorHandler for %s\n", c.id)
-				break
+				break loop
 			}
 		}
 	}

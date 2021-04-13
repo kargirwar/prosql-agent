@@ -1,22 +1,29 @@
 package main
 
 import (
-	_ "github.com/go-sql-driver/mysql"
 	"log"
 	"time"
+
+	_ "github.com/go-sql-driver/mysql"
 )
 
 //goroutine to deal with one session
 func sessionHandler(s *session) {
-	log.Printf("Starting handler for %s\n", s.id)
+	log.Printf("Starting session handler for %s\n", s.id)
 	defer s.pool.Close()
 
 	ticker := time.NewTicker(CURSOR_CLEANUP_INTERVAL)
 
+loop:
 	for {
 		select {
 		case req := <-s.in:
 			handleSessionRequest(s, req)
+
+			if req.code == CMD_CLEANUP {
+				log.Printf("Shutting down session handler for %s\n", s.id)
+				break loop
+			}
 
 		case <-ticker.C:
 			cleanupCursors(s)
