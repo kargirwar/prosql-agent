@@ -15,7 +15,7 @@ func TestNewSession(t *testing.T) {
 
 	t.Log(sid)
 
-	cid, err := Execute(sid, "select * from invoices")
+	cid, err := Execute(sid, "select * from users")
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}

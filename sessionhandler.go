@@ -11,10 +11,46 @@ func sessionHandler(s *session) {
 	log.Printf("Starting handler for %s\n", s.id)
 	defer s.pool.Close()
 
+	ticker := time.NewTicker(CURSOR_CLEANUP_INTERVAL)
+
 	for {
 		select {
 		case req := <-s.in:
 			handleSessionRequest(s, req)
+
+		case <-ticker.C:
+			cleanupCursors(s)
+		}
+	}
+}
+
+func cleanupCursors(s *session) {
+	log.Println("Staring cleanup for: " + s.id)
+	keys := s.cursorStore.getKeys()
+	for _, k := range keys {
+		log.Println("Checking cursor: " + k)
+		c, _ := s.cursorStore.get(k)
+		if c == nil {
+			log.Println("Skipping cursor: " + k)
+			continue
+		}
+
+		now := time.Now()
+		if now.Sub(c.accessTime) > CURSOR_CLEANUP_INTERVAL {
+			log.Println("Cleaning up cursor: " + k)
+			c.in <- &Req{
+				code: CMD_CLEANUP,
+			}
+
+			res := <-c.out
+			if res.code == ERROR {
+				//TODO: What are we going to do here?
+				log.Println("Unable to cleanup " + k)
+				continue
+			}
+
+			s.cursorStore.clear(k)
+			log.Println("Cleanup done for cursor: " + k)
 		}
 	}
 }

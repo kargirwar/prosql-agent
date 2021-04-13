@@ -108,6 +108,7 @@ func createCursor(s *session, query string) (*cursor, error) {
 	c.in = make(chan *Req)
 	c.out = make(chan *Res)
 	c.rows = rows
+	c.accessTime = time.Now()
 	c.cancel = cancel
 
 	return &c, nil
@@ -121,6 +122,7 @@ func cursorHandler(c *cursor) {
 	for {
 		select {
 		case req := <-c.in:
+			c.accessTime = time.Now()
 			res := handleCursorRequest(c, req)
 			c.out <- res
 			if res.code == ERROR || res.code == EOF || res.code == CLEANUP_DONE {
