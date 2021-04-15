@@ -2,8 +2,8 @@ package main
 
 import "time"
 
-const SESSION_CLEANUP_INTERVAL = 1 * time.Hour
-const CURSOR_CLEANUP_INTERVAL = 15 * time.Minute
+const SESSION_CLEANUP_INTERVAL = 1 * time.Minute
+const CURSOR_CLEANUP_INTERVAL = 1 * time.Minute
 
 //error codes
 const ERR_INVALID_USER_INPUT = "invalid-user-input"

@@ -32,7 +32,7 @@ loop:
 }
 
 func cleanupCursors(s *session) {
-	log.Println("Staring cleanup for: " + s.id)
+	log.Println("Starting cleanup for: " + s.id)
 	keys := s.cursorStore.getKeys()
 	for _, k := range keys {
 		log.Println("Checking cursor: " + k)

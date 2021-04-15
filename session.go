@@ -10,11 +10,13 @@ package main
 import (
 	"database/sql"
 	"errors"
-	"github.com/dchest/uniuri"
-	_ "github.com/go-sql-driver/mysql"
 	"log"
+	"runtime/pprof"
 	"sync"
 	"time"
+
+	"github.com/dchest/uniuri"
+	_ "github.com/go-sql-driver/mysql"
 )
 
 //==============================================================//
@@ -146,6 +148,10 @@ func cleanupSessions() {
 					log.Println("Cleanup done for session: " + k)
 				}
 			}
+
+			if err := pprof.WriteHeapProfile(mp); err != nil {
+				log.Fatal("could not write memory profile: ", err)
+			}
 		}
 	}
 }
@@ -211,6 +217,7 @@ func Fetch(sid string, cid string, n int) (*[][]string, bool, error) {
 	return res.data.(*[][]string), eof, nil
 }
 
+//cancel a running query
 func Cancel(sid string, cid string) error {
 	s, err := sessionStore.get(sid)
 	if err != nil {
