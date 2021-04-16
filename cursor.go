@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"time"
 
@@ -24,6 +23,7 @@ type cursor struct {
 	out        chan *Res
 	accessTime time.Time
 	cancel     context.CancelFunc
+	ctx        context.Context
 }
 
 type cursors struct {
@@ -110,6 +110,7 @@ func createCursor(s *session, query string) (*cursor, error) {
 	c.out = make(chan *Res)
 	c.rows = rows
 	c.accessTime = time.Now()
+	c.ctx = ctx
 	c.cancel = cancel
 
 	return &c, nil
@@ -127,11 +128,15 @@ loop:
 			c.accessTime = time.Now()
 			res := handleCursorRequest(c, req)
 			c.out <- res
-			if res.code == ERROR || res.code == EOF || res.code == CLEANUP_DONE {
+			if res.code == ERROR || res.code == EOF {
 				//Whatever the error we should exit
-				log.Printf("Shutting down cursorHandler for %s\n", c.id)
+				log.Printf("%s: Shutting down cursorHandler due to %s\n", c.id, res.code)
 				break loop
 			}
+
+		case <-c.ctx.Done():
+			log.Printf("%s: Shutting down cursorHandler due to ctx.Done", c.id)
+			break loop
 		}
 	}
 }
@@ -139,7 +144,7 @@ loop:
 func handleCursorRequest(c *cursor, req *Req) *Res {
 	switch req.code {
 	case CMD_FETCH:
-		log.Printf("Handling CMD_FETCH")
+		log.Printf("%s: Handling CMD_FETCH\n", c.id)
 		fetchReq, _ := req.data.(FetchReq)
 		rows, err := fetchRows(c, fetchReq)
 		if err != nil {
@@ -149,7 +154,7 @@ func handleCursorRequest(c *cursor, req *Req) *Res {
 			}
 		}
 
-		log.Printf("Done CMD_FETCH")
+		log.Printf("%s: Done CMD_FETCH\n", c.id)
 
 		var code string
 		if len(*rows) < fetchReq.n {
@@ -163,12 +168,8 @@ func handleCursorRequest(c *cursor, req *Req) *Res {
 			data: rows,
 		}
 
-	case CMD_CLEANUP:
-		return &Res{
-			code: CLEANUP_DONE,
-		}
-
 	default:
+		log.Printf("%s: Invalid Command\n", c.id)
 		return &Res{
 			code: ERROR,
 			data: errors.New(ERR_INVALID_CURSOR_CMD),
@@ -181,26 +182,42 @@ func fetchRows(c *cursor, fetchReq FetchReq) (*[][]string, error) {
 		return nil, errors.New(ERR_INVALID_CURSOR_ID)
 	}
 
-	var allrows [][]string
-
-	columnNames, err := c.rows.Columns()
+	cols, err := c.rows.Columns()
 	if err != nil {
 		return nil, err
 	}
 
-	rc := NewStringStringScan(columnNames)
+	vals := make([]interface{}, len(cols))
+	var results [][]string
 
 	n := 0
 	for c.rows.Next() {
-		err := rc.Update(c.rows)
+		for i := range cols {
+			vals[i] = &vals[i]
+		}
+
+		err = c.rows.Scan(vals...)
+		// Now you can check each element of vals for nil-ness,
 		if err != nil {
 			return nil, err
 		}
 
-		cv := rc.Get()
-		var m = make([]string, len(cv))
-		copy(m, cv)
-		allrows = append(allrows, m)
+		var r []string
+		for i, c := range cols {
+			r = append(r, c)
+			var v string
+
+			if vals[i] == nil {
+				v = "NULL"
+			} else {
+				b, _ := vals[i].([]byte)
+				v = string(b)
+			}
+
+			r = append(r, v)
+		}
+
+		results = append(results, r)
 
 		n++
 		if n == fetchReq.n {
@@ -212,55 +229,5 @@ func fetchRows(c *cursor, fetchReq FetchReq) (*[][]string, error) {
 		return nil, c.rows.Err()
 	}
 
-	return &allrows, nil
-}
-
-/**
-  using a string slice
-*/
-type stringStringScan struct {
-	// cp are the column pointers
-	cp []interface{}
-	// row contains the final result
-	row      []string
-	colCount int
-	colNames []string
-}
-
-func NewStringStringScan(columnNames []string) *stringStringScan {
-	lenCN := len(columnNames)
-	s := &stringStringScan{
-		cp:       make([]interface{}, lenCN),
-		row:      make([]string, lenCN*2),
-		colCount: lenCN,
-		colNames: columnNames,
-	}
-	j := 0
-	for i := 0; i < lenCN; i++ {
-		s.cp[i] = new(sql.RawBytes)
-		s.row[j] = s.colNames[i]
-		j = j + 2
-	}
-	return s
-}
-
-func (s *stringStringScan) Update(rows *sql.Rows) error {
-	if err := rows.Scan(s.cp...); err != nil {
-		return err
-	}
-	j := 0
-	for i := 0; i < s.colCount; i++ {
-		if rb, ok := s.cp[i].(*sql.RawBytes); ok {
-			s.row[j+1] = string(*rb)
-			*rb = nil // reset pointer to discard current value to avoid a bug
-		} else {
-			return fmt.Errorf("Cannot convert index %d column %s to type *sql.RawBytes", i, s.colNames[i])
-		}
-		j = j + 2
-	}
-	return nil
-}
-
-func (s *stringStringScan) Get() []string {
-	return s.row
+	return &results, nil
 }

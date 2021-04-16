@@ -31,35 +31,32 @@ loop:
 	}
 }
 
+//cleanup cursors which have not been accessed for CURSOR_CLEANUP_INTERVAL
 func cleanupCursors(s *session) {
-	log.Println("Starting cleanup for: " + s.id)
+	log.Printf("%s: Starting cleanup\n", s.id)
 	keys := s.cursorStore.getKeys()
 	for _, k := range keys {
-		log.Println("Checking cursor: " + k)
+		log.Printf("%s: Checking cursor: %s\n", s.id, k)
 		c, _ := s.cursorStore.get(k)
 		if c == nil {
-			log.Println("Skipping cursor: " + k)
+			log.Printf("%s: Skipping cursor: %s\n", s.id, k)
 			continue
 		}
 
 		now := time.Now()
 		if now.Sub(c.accessTime) > CURSOR_CLEANUP_INTERVAL {
-			log.Println("Cleaning up cursor: " + k)
-			c.in <- &Req{
-				code: CMD_CLEANUP,
-			}
+			log.Printf("%s: Cleaning up cursor: %s\n", s.id, k)
+			//This will handle both cases: either the cursor is in the middle of a query
+			//or waiting for a command from session handler
+			c.cancel()
 
-			res := <-c.out
-			if res.code == ERROR {
-				//TODO: What are we going to do here?
-				log.Println("Unable to cleanup " + k)
-				continue
-			}
-
+			log.Printf("%s: Cleanup done for cursor: %s\n", s.id, k)
 			s.cursorStore.clear(k)
-			log.Println("Cleanup done for cursor: " + k)
+			log.Printf("%s: Clear done for cursor: %s\n", s.id, k)
 		}
 	}
+
+	log.Printf("%s: Done cleanup\n", s.id)
 }
 
 func handleSessionRequest(s *session, req *Req) {
@@ -79,26 +76,33 @@ func handleSessionRequest(s *session, req *Req) {
 	}
 }
 
-//send cleanup command to all the cursors
+//cleanup cursors *unconditionally*
 func handleCleanup(s *session, req *Req) {
-	log.Println("Handling " + CMD_CLEANUP)
+	log.Printf("%s: Handling CMD_CLEANUP\n", s.id)
+
 	keys := s.cursorStore.getKeys()
 	for _, k := range keys {
 		c, _ := s.cursorStore.get(k)
-		c.in <- &Req{
-			code: CMD_CANCEL,
-		}
-		<-c.out
+		log.Printf("%s: Cleaning up cursor: %s\n", s.id, k)
+		//This will handle both cases: either the cursor is in the middle of a query
+		//or waiting for a command from session handler
+		c.cancel()
+
+		log.Printf("%s: Cleanup done for cursor: %s\n", s.id, k)
+		s.cursorStore.clear(k)
+		log.Printf("%s: Clear done for cursor: %s\n", s.id, k)
 	}
 
 	s.out <- &Res{
 		code: CLEANUP_DONE,
 	}
+
+	log.Printf("%s: Done CMD_CLEANUP\n", s.id)
 }
 
 func handleExecute(s *session, req *Req) {
 	query, _ := req.data.(string)
-	log.Println("Handling " + CMD_EXECUTE + ":" + query)
+	log.Printf("%s: Handling CMD_EXECUTE for: %s\n", s.id, query)
 
 	c, err := NewCursor(s, query)
 	if err != nil {
@@ -115,12 +119,16 @@ func handleExecute(s *session, req *Req) {
 		code: SUCCESS,
 		data: c.id,
 	}
+
+	log.Printf("%s: Done CMD_EXECUTE for: %s\n", s.id, query)
 }
 
 func handleFetch(s *session, req *Req) {
 	//just pass on to appropriate cursor and wait for results
 	fetchReq, _ := req.data.(FetchReq)
 	c, err := s.cursorStore.get(fetchReq.cid)
+
+	log.Printf("%s: Handling CMD_FETCH for: %s\n", s.id, c.id)
 
 	if err != nil {
 		s.out <- &Res{
@@ -139,12 +147,14 @@ func handleFetch(s *session, req *Req) {
 		s.cursorStore.clear(fetchReq.cid)
 	}
 	s.out <- res
+	log.Printf("%s: Done CMD_FETCH for: %s\n", s.id, c.id)
 }
 
 func handleCancel(s *session, req *Req) {
-	log.Println("Handling CMD_CANCEL")
 	cid := req.data.(string)
 	c, err := s.cursorStore.get(cid)
+
+	log.Printf("%s: Handling CMD_CANCEL for: %s\n", s.id, c.id)
 
 	if err != nil {
 		s.out <- &Res{
@@ -160,4 +170,5 @@ func handleCancel(s *session, req *Req) {
 	s.out <- &Res{
 		code: SUCCESS,
 	}
+	log.Printf("%s: Done CMD_CANCEL for: %s\n", s.id, c.id)
 }

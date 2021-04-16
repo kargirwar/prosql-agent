@@ -11,7 +11,6 @@ import (
 	"database/sql"
 	"errors"
 	"log"
-	"runtime/pprof"
 	"sync"
 	"time"
 
@@ -120,19 +119,19 @@ func cleanupSessions() {
 	for {
 		select {
 		case <-ticker.C:
-			log.Println("Starting cleanup")
+			log.Printf("Starting session cleanup")
 			keys := sessionStore.getKeys()
 			for _, k := range keys {
-				log.Println("Checking session: " + k)
+				log.Printf("%s: Checking session\n", k)
 				s, _ := sessionStore.get(k)
 				if s == nil {
-					log.Println("Skipping session: " + k)
+					log.Printf("%s: Skipping session\n", k)
 					continue
 				}
 
 				now := time.Now()
 				if now.Sub(s.accessTime) > SESSION_CLEANUP_INTERVAL {
-					log.Println("Cleaning up session: " + k)
+					log.Printf("%s: Cleaning up session\n", k)
 					s.in <- &Req{
 						code: CMD_CLEANUP,
 					}
@@ -140,18 +139,17 @@ func cleanupSessions() {
 					res := <-s.out
 					if res.code == ERROR {
 						//TODO: What are we going to do here?
-						log.Println("Unable to cleanup " + k)
+						log.Printf("%s: Unable to cleanup\n", k)
 						continue
 					}
 
+					log.Printf("%s: Cleanup done\n", k)
 					sessionStore.clear(k)
-					log.Println("Cleanup done for session: " + k)
+					log.Printf("%s: Clear done\n", k)
 				}
 			}
 
-			if err := pprof.WriteHeapProfile(mp); err != nil {
-				log.Fatal("could not write memory profile: ", err)
-			}
+			log.Printf("Done session cleanup")
 		}
 	}
 }

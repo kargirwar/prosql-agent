@@ -16,7 +16,7 @@ func main() {
 	}
 
 	//rows, err := db.Query("SELECT id, name, `store-id` FROM users where `store-id` is null limit 5")
-	rows, err := db.Query("SELECT * from users")
+	rows, err := db.Query("SELECT * from users limit 5")
 	if err != nil && err != sql.ErrNoRows {
 		log.Fatal(err)
 	}
@@ -27,6 +27,7 @@ func main() {
 	}
 
 	vals := make([]interface{}, len(cols))
+	var results [][]string
 
 	for rows.Next() {
 
@@ -40,18 +41,25 @@ func main() {
 			log.Fatal(err)
 		}
 
+		var r []string
 		for i, c := range cols {
+			r = append(r, c)
 			var v string
+
 			if vals[i] == nil {
 				v = "NULL"
 			} else {
-				b, ok := vals[i].([]byte)
-				if ok {
-					v = string(b)
-				}
+				b, _ := vals[i].([]byte)
+				v = string(b)
 			}
+
+			r = append(r, v)
 
 			fmt.Printf("%s %s\n", c, v)
 		}
+
+		results = append(results, r)
 	}
+
+	fmt.Println(results)
 }
