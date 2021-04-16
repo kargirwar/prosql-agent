@@ -24,23 +24,38 @@ type cursor struct {
 	accessTime time.Time
 	cancel     context.CancelFunc
 	ctx        context.Context
+	mutex      sync.Mutex
+}
+
+func (pc *cursor) setAccessTime() {
+	pc.mutex.Lock()
+	defer pc.mutex.Unlock()
+
+	pc.accessTime = time.Now()
+}
+
+func (pc *cursor) getAccessTime() time.Time {
+	pc.mutex.Lock()
+	defer pc.mutex.Unlock()
+
+	return pc.accessTime
 }
 
 type cursors struct {
-	store  map[string]*cursor
-	cmutex sync.Mutex
+	store map[string]*cursor
+	mutex sync.Mutex
 }
 
 func (pc *cursors) set(cid string, c *cursor) {
-	pc.cmutex.Lock()
-	defer pc.cmutex.Unlock()
+	pc.mutex.Lock()
+	defer pc.mutex.Unlock()
 
 	pc.store[cid] = c
 }
 
 func (pc *cursors) get(cid string) (*cursor, error) {
-	pc.cmutex.Lock()
-	defer pc.cmutex.Unlock()
+	pc.mutex.Lock()
+	defer pc.mutex.Unlock()
 
 	c, present := pc.store[cid]
 	if !present {
@@ -51,8 +66,8 @@ func (pc *cursors) get(cid string) (*cursor, error) {
 }
 
 func (pc *cursors) getKeys() []string {
-	pc.cmutex.Lock()
-	defer pc.cmutex.Unlock()
+	pc.mutex.Lock()
+	defer pc.mutex.Unlock()
 
 	keys := make([]string, len(pc.store))
 
@@ -66,8 +81,8 @@ func (pc *cursors) getKeys() []string {
 }
 
 func (pc *cursors) clear(k string) {
-	pc.cmutex.Lock()
-	defer pc.cmutex.Unlock()
+	pc.mutex.Lock()
+	defer pc.mutex.Unlock()
 
 	_, present := pc.store[k]
 	if present {
@@ -125,7 +140,7 @@ loop:
 	for {
 		select {
 		case req := <-c.in:
-			c.accessTime = time.Now()
+			c.setAccessTime()
 			res := handleCursorRequest(c, req)
 			c.out <- res
 			if res.code == ERROR || res.code == EOF {

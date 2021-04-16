@@ -44,7 +44,7 @@ func cleanupCursors(s *session) {
 		}
 
 		now := time.Now()
-		if now.Sub(c.accessTime) > CURSOR_CLEANUP_INTERVAL {
+		if now.Sub(c.getAccessTime()) > CURSOR_CLEANUP_INTERVAL {
 			log.Printf("%s: Cleaning up cursor: %s\n", s.id, k)
 			//This will handle both cases: either the cursor is in the middle of a query
 			//or waiting for a command from session handler
