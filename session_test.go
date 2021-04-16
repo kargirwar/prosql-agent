@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const N = 2000
+const N = 1000
 
 func TestNewSession(t *testing.T) {
 	sid, err := NewSession("mysql", os.Getenv("DSN"))
@@ -110,7 +110,7 @@ const STRESS_STOP_TIME = 30 * time.Second
 //Repeat several times for a long period of time.
 func TestStress(t *testing.T) {
 	n := strconv.Itoa(N)
-	n10 := strconv.Itoa(N + 10)
+	n10 := strconv.Itoa(N * 10)
 	n100 := strconv.Itoa(N * 10)
 
 	queries := []string{
@@ -184,13 +184,16 @@ func testFetch(t *testing.T, queries []string) {
 	for {
 		rows, eof, err := Fetch(sid, cid, N)
 		if err != nil {
-			t.Errorf("%s\n", err.Error())
-			return
+			if err.Error() == ERR_INVALID_CURSOR_ID {
+				t.Logf("%s: Breaking due to ERR_INVALID_CURSOR_ID", sid)
+				break
+			}
 		}
 
-		t.Logf("Received %d rows", len(*rows))
+		t.Logf("%s: Received %d rows", sid, len(*rows))
 		if eof == true {
-			return
+			t.Logf("%s: Breaking due to EOF", sid)
+			break
 		}
 	}
 }
