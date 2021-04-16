@@ -28,23 +28,38 @@ type session struct {
 	out         chan *Res
 	accessTime  time.Time
 	cursorStore *cursors
+	mutex       sync.Mutex
+}
+
+func (ps *session) setAccessTime() {
+	ps.mutex.Lock()
+	defer ps.mutex.Unlock()
+
+	ps.accessTime = time.Now()
+}
+
+func (ps *session) getAccessTime() time.Time {
+	ps.mutex.Lock()
+	defer ps.mutex.Unlock()
+
+	return ps.accessTime
 }
 
 type sessions struct {
-	store  map[string]*session
-	smutex sync.Mutex
+	store map[string]*session
+	mutex sync.Mutex
 }
 
 func (ps *sessions) set(sid string, s *session) {
-	ps.smutex.Lock()
-	defer ps.smutex.Unlock()
+	ps.mutex.Lock()
+	defer ps.mutex.Unlock()
 
 	ps.store[sid] = s
 }
 
 func (ps *sessions) get(sid string) (*session, error) {
-	ps.smutex.Lock()
-	defer ps.smutex.Unlock()
+	ps.mutex.Lock()
+	defer ps.mutex.Unlock()
 
 	s, present := ps.store[sid]
 	if !present {
@@ -55,8 +70,8 @@ func (ps *sessions) get(sid string) (*session, error) {
 }
 
 func (ps *sessions) getKeys() []string {
-	ps.smutex.Lock()
-	defer ps.smutex.Unlock()
+	ps.mutex.Lock()
+	defer ps.mutex.Unlock()
 
 	keys := make([]string, len(ps.store))
 
@@ -70,8 +85,8 @@ func (ps *sessions) getKeys() []string {
 }
 
 func (ps *sessions) clear(k string) {
-	ps.smutex.Lock()
-	defer ps.smutex.Unlock()
+	ps.mutex.Lock()
+	defer ps.mutex.Unlock()
 
 	_, present := ps.store[k]
 	if present {
@@ -130,7 +145,7 @@ func cleanupSessions() {
 				}
 
 				now := time.Now()
-				if now.Sub(s.accessTime) > SESSION_CLEANUP_INTERVAL {
+				if now.Sub(s.getAccessTime()) > SESSION_CLEANUP_INTERVAL {
 					log.Printf("%s: Cleaning up session\n", k)
 					s.in <- &Req{
 						code: CMD_CLEANUP,
@@ -153,6 +168,10 @@ func cleanupSessions() {
 		}
 	}
 }
+
+//==============================================================//
+//         External Interface
+//==============================================================//
 
 func NewSession(dbtype string, dsn string) (string, error) {
 	s, err := createSession(dbtype, dsn)
@@ -234,6 +253,10 @@ func Cancel(sid string, cid string) error {
 
 	return nil
 }
+
+//==============================================================//
+//         External Interface End
+//==============================================================//
 
 func createSession(dbtype string, dsn string) (*session, error) {
 	pool, err := sql.Open(dbtype, dsn)

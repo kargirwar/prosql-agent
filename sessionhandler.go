@@ -60,7 +60,7 @@ func cleanupCursors(s *session) {
 }
 
 func handleSessionRequest(s *session, req *Req) {
-	s.accessTime = time.Now()
+	s.setAccessTime()
 	switch req.code {
 	case CMD_EXECUTE:
 		handleExecute(s, req)
@@ -128,8 +128,6 @@ func handleFetch(s *session, req *Req) {
 	fetchReq, _ := req.data.(FetchReq)
 	c, err := s.cursorStore.get(fetchReq.cid)
 
-	log.Printf("%s: Handling CMD_FETCH for: %s\n", s.id, c.id)
-
 	if err != nil {
 		s.out <- &Res{
 			code: ERROR,
@@ -137,6 +135,8 @@ func handleFetch(s *session, req *Req) {
 		}
 		return
 	}
+
+	log.Printf("%s: Handling CMD_FETCH for: %s\n", s.id, c.id)
 
 	//send fetch request to cursor
 	c.in <- req
