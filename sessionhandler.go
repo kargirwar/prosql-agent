@@ -37,8 +37,8 @@ func cleanupCursors(s *session) {
 	keys := s.cursorStore.getKeys()
 	for _, k := range keys {
 		log.Printf("%s: Checking cursor: %s\n", s.id, k)
-		c, _ := s.cursorStore.get(k)
-		if c == nil {
+		c, err := s.cursorStore.get(k)
+		if err != nil {
 			log.Printf("%s: Skipping cursor: %s\n", s.id, k)
 			continue
 		}
@@ -82,10 +82,15 @@ func handleCleanup(s *session, req *Req) {
 
 	keys := s.cursorStore.getKeys()
 	for _, k := range keys {
-		c, _ := s.cursorStore.get(k)
+		c, err := s.cursorStore.get(k)
 		log.Printf("%s: Cleaning up cursor: %s\n", s.id, k)
 		//This will handle both cases: either the cursor is in the middle of a query
 		//or waiting for a command from session handler
+		if err != nil {
+			s.cursorStore.clear(k)
+			log.Printf("%s cleaned up invalid cursor: %s\n", s.id, k)
+			continue
+		}
 		c.cancel()
 
 		log.Printf("%s: Cleanup done for cursor: %s\n", s.id, k)
@@ -104,21 +109,16 @@ func handleExecute(s *session, req *Req) {
 	query, _ := req.data.(string)
 	log.Printf("%s: Handling CMD_EXECUTE for: %s\n", s.id, query)
 
-	c, err := NewCursor(s, query)
-	if err != nil {
-		s.out <- &Res{
-			code: ERROR,
-			data: err,
-		}
-
-		return
-	}
-
+	//create a cursor and return its id. Do not execute right away
+	c := NewCursor()
 	s.cursorStore.set(c.id, c)
 	s.out <- &Res{
 		code: SUCCESS,
 		data: c.id,
 	}
+
+	//now start actual execution
+	c.start(s, query)
 
 	log.Printf("%s: Done CMD_EXECUTE for: %s\n", s.id, query)
 }
@@ -141,13 +141,8 @@ func handleFetch(s *session, req *Req) {
 	//send fetch request to cursor
 	c.in <- req
 	res := <-c.out
-	if res.code == ERROR {
-		//if there is error the cursorHandler must have exited. No need to
-		//keep reference to it
-		s.cursorStore.clear(fetchReq.cid)
-	}
+	log.Printf("%s: Done CMD_FETCH for: %s with code: %s\n", s.id, c.id, res.code)
 	s.out <- res
-	log.Printf("%s: Done CMD_FETCH for: %s\n", s.id, c.id)
 }
 
 func handleCancel(s *session, req *Req) {

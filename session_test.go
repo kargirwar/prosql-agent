@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"math/rand"
 	"os"
 	"strconv"
@@ -27,7 +28,8 @@ func TestExecute(t *testing.T) {
 
 	t.Log(sid)
 
-	_, err = Execute(sid, "select * from users")
+	//_, err = Execute(sid, "select * from users")
+	_, err = Execute(sid, "select sleep (10)")
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}
@@ -68,13 +70,13 @@ func TestCancel(t *testing.T) {
 
 	t.Log(sid)
 
-	cid, err := Execute(sid, "select * from invoices")
+	cid, err := Execute(sid, "select sleep(10)")
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}
 
 	//test cancellation
-	t1 := time.NewTimer(10 * time.Second)
+	t1 := time.NewTimer(2 * time.Second)
 	go func() {
 		<-t1.C
 		err := Cancel(sid, cid)
@@ -85,10 +87,15 @@ func TestCancel(t *testing.T) {
 
 	for {
 		rows, eof, err := Fetch(sid, cid, N)
+		if err == context.Canceled {
+			//expected
+			t.Logf("%s: Breaking due to context canceled", sid)
+			break
+		}
+
 		if err != nil {
-			if err.Error() == ERR_INVALID_CURSOR_ID {
-				break
-			}
+			t.Errorf("%s: %s", sid, err.Error())
+			break
 		}
 
 		t.Logf("Received %d rows", len(*rows))
@@ -102,22 +109,21 @@ const TEST_UNUSED_SESSION = 0
 const TEST_FETCH = 1
 const TEST_CANCEL = 2
 const STRESS_TICKER_INTERVAL = 1 * time.Second
-const STRESS_STOP_TIME = 30 * time.Second
+const STRESS_STOP_TIME = 120 * time.Second
+const CANCEL_AFTER = 2 * time.Second
 
 //create several sessions. Leave some sessions unused
 //Fetch data from some sessions
 //Cancel a few sessions
 //Repeat several times for a long period of time.
 func TestStress(t *testing.T) {
-	n := strconv.Itoa(N)
-	n10 := strconv.Itoa(N * 10)
-	n100 := strconv.Itoa(N * 10)
-
 	queries := []string{
-		"select * from users limit " + n,
-		"select * from invoices limit " + n100,
-		"select * from `bills-1` limit " + n100,
-		"select * from `short-book-1` limit " + n10,
+		"select * from users limit " + strconv.Itoa(N),
+		"select * from invoices limit " + strconv.Itoa(N*100),
+		"select * from `bills-1` limit " + strconv.Itoa(N/100),
+		"select * from `short-book-1` limit " + strconv.Itoa(N-1),
+		"select sleep(10)",
+		"select sleep(1)",
 	}
 
 	ticker := time.NewTicker(STRESS_TICKER_INTERVAL)
@@ -126,6 +132,7 @@ loop:
 	for {
 		select {
 		case <-stopTimer.C:
+			t.Logf("Done testing")
 			break loop
 
 		case <-ticker.C:
@@ -135,7 +142,7 @@ loop:
 }
 
 func startTest(t *testing.T, queries []string) {
-	t.Errorf("Starting new test")
+	t.Logf("Starting new test")
 	types := []int{TEST_UNUSED_SESSION, TEST_FETCH, TEST_CANCEL}
 	n := rand.Intn(len(types))
 
@@ -152,10 +159,12 @@ func startTest(t *testing.T, queries []string) {
 }
 
 func testUnused(t *testing.T, queries []string) {
+	t.Logf("testUnused")
 	q := queries[rand.Intn(len(queries))]
 	sid, err := NewSession("mysql", os.Getenv("DSN"))
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
+		return
 	}
 
 	t.Log(sid)
@@ -167,11 +176,13 @@ func testUnused(t *testing.T, queries []string) {
 }
 
 func testFetch(t *testing.T, queries []string) {
+	t.Logf("testFetch")
 	q := queries[rand.Intn(len(queries))]
 
 	sid, err := NewSession("mysql", os.Getenv("DSN"))
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
+		return
 	}
 
 	t.Log(sid)
@@ -179,15 +190,14 @@ func testFetch(t *testing.T, queries []string) {
 	cid, err := Execute(sid, q)
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
+		return
 	}
 
 	for {
 		rows, eof, err := Fetch(sid, cid, N)
 		if err != nil {
-			if err.Error() == ERR_INVALID_CURSOR_ID {
-				t.Logf("%s: Breaking due to ERR_INVALID_CURSOR_ID", sid)
-				break
-			}
+			t.Errorf("%s: %s", sid, err.Error())
+			break
 		}
 
 		t.Logf("%s: Received %d rows", sid, len(*rows))
@@ -199,11 +209,13 @@ func testFetch(t *testing.T, queries []string) {
 }
 
 func testCancel(t *testing.T, queries []string) {
+	t.Logf("testCancel")
 	q := queries[rand.Intn(len(queries))]
 
 	sid, err := NewSession("mysql", os.Getenv("DSN"))
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
+		return
 	}
 
 	t.Log(sid)
@@ -211,10 +223,11 @@ func testCancel(t *testing.T, queries []string) {
 	cid, err := Execute(sid, q)
 	if err != nil {
 		t.Errorf("%s: %s\n", sid, err.Error())
+		return
 	}
 
 	//test cancellation
-	t1 := time.NewTimer(2 * time.Second)
+	t1 := time.NewTimer(CANCEL_AFTER)
 	go func() {
 		<-t1.C
 		err := Cancel(sid, cid)
@@ -225,11 +238,15 @@ func testCancel(t *testing.T, queries []string) {
 
 	for {
 		rows, eof, err := Fetch(sid, cid, N)
+		if err == context.Canceled {
+			//expected
+			t.Logf("%s: Breaking due to context canceled", sid)
+			break
+		}
+
 		if err != nil {
-			if err.Error() == ERR_INVALID_CURSOR_ID {
-				t.Logf("%s: Breaking due to ERR_INVALID_CURSOR_ID", sid)
-				break
-			}
+			t.Errorf("%s: %s", sid, err.Error())
+			break
 		}
 
 		t.Logf("%s: Received %d rows", sid, len(*rows))

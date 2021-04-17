@@ -25,6 +25,21 @@ type cursor struct {
 	cancel     context.CancelFunc
 	ctx        context.Context
 	mutex      sync.Mutex
+	err        error
+}
+
+func (pc *cursor) start(s *session, query string) error {
+	pc.mutex.Lock()
+	defer pc.mutex.Unlock()
+
+	rows, err := s.pool.QueryContext(pc.ctx, query)
+	if err != nil {
+		pc.err = err
+		return err
+	}
+
+	pc.rows = rows
+	return nil
 }
 
 func (pc *cursor) setAccessTime() {
@@ -62,6 +77,10 @@ func (pc *cursors) get(cid string) (*cursor, error) {
 		return nil, errors.New(ERR_INVALID_CURSOR_ID)
 	}
 
+	if c.err != nil {
+		return nil, c.err
+	}
+
 	return c, nil
 }
 
@@ -84,8 +103,11 @@ func (pc *cursors) clear(k string) {
 	pc.mutex.Lock()
 	defer pc.mutex.Unlock()
 
-	_, present := pc.store[k]
+	c, present := pc.store[k]
 	if present {
+		if c.rows != nil {
+			c.rows.Close()
+		}
 		delete(pc.store, k)
 	}
 }
@@ -101,40 +123,30 @@ func NewCursorStore() *cursors {
 //          cursor structs and methods end
 //==============================================================//
 
-func NewCursor(s *session, query string) (*cursor, error) {
-	c, err := createCursor(s, query)
-
-	if err != nil {
-		return nil, err
-	}
-
+func NewCursor() *cursor {
+	c := createCursor()
 	go cursorHandler(c)
-	return c, nil
+	return c
 }
 
-func createCursor(s *session, query string) (*cursor, error) {
-	ctx, cancel := context.WithCancel(context.Background())
-	rows, err := s.pool.QueryContext(ctx, query)
-	if err != nil {
-		return nil, err
-	}
-
+func createCursor() *cursor {
 	var c cursor
+	ctx, cancel := context.WithCancel(context.Background())
 	c.id = uniuri.New()
 	c.in = make(chan *Req)
 	c.out = make(chan *Res)
-	c.rows = rows
 	c.accessTime = time.Now()
 	c.ctx = ctx
 	c.cancel = cancel
 
-	return &c, nil
+	return &c
 }
+
+//func
 
 //goroutine to handle a single cursor
 func cursorHandler(c *cursor) {
 	log.Printf("Starting cursorHandler for %s\n", c.id)
-	defer c.rows.Close()
 
 loop:
 	for {

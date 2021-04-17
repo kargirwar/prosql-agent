@@ -138,8 +138,8 @@ func cleanupSessions() {
 			keys := sessionStore.getKeys()
 			for _, k := range keys {
 				log.Printf("%s: Checking session\n", k)
-				s, _ := sessionStore.get(k)
-				if s == nil {
+				s, err := sessionStore.get(k)
+				if err != nil {
 					log.Printf("%s: Skipping session\n", k)
 					continue
 				}
@@ -192,6 +192,7 @@ func Execute(sid string, query string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	//we ask the session handler to create a new cursor and return its id
 	s.in <- &Req{
 		code: CMD_EXECUTE,
@@ -222,6 +223,8 @@ func Fetch(sid string, cid string, n int) (*[][]string, bool, error) {
 	}
 
 	res := <-s.out
+	log.Printf("FETCH s: %s c: %s code %s\n", s.id, cid, res.code)
+
 	if res.code == ERROR {
 		return nil, false, res.data.(error)
 	}
@@ -241,15 +244,12 @@ func Cancel(sid string, cid string) error {
 		return err
 	}
 
-	s.in <- &Req{
-		code: CMD_CANCEL,
-		data: cid,
+	c, err := s.cursorStore.get(cid)
+	if err != nil {
+		return err
 	}
 
-	res := <-s.out
-	if res.code == ERROR {
-		return res.data.(error)
-	}
+	c.cancel()
 
 	return nil
 }
