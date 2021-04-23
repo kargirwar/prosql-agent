@@ -142,6 +142,10 @@ func handleFetch(s *session, req *Req) {
 	c.in <- req
 	res := <-c.out
 	log.Printf("%s: Done CMD_FETCH for: %s with code: %s\n", s.id, c.id, res.code)
+	if res.code == ERROR || res.code == EOF {
+		log.Printf("%s: clearing cursor %s\n", s.id, c.id)
+		s.cursorStore.clear(c.id)
+	}
 	s.out <- res
 }
 

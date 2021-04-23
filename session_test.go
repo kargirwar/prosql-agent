@@ -109,7 +109,7 @@ const TEST_UNUSED_SESSION = 0
 const TEST_FETCH = 1
 const TEST_CANCEL = 2
 const STRESS_TICKER_INTERVAL = 1 * time.Second
-const STRESS_STOP_TIME = 120 * time.Second
+const STRESS_STOP_TIME = 300 * time.Second
 const CANCEL_AFTER = 2 * time.Second
 
 //create several sessions. Leave some sessions unused
@@ -252,6 +252,35 @@ func testCancel(t *testing.T, queries []string) {
 		t.Logf("%s: Received %d rows", sid, len(*rows))
 		if eof == true {
 			t.Logf("%s: Breaking due to EOF", sid)
+			break
+		}
+	}
+}
+
+func TestFetchAfterEof(t *testing.T) {
+	t.Logf("testCancel")
+	q := "select * from stores"
+
+	sid, err := NewSession("mysql", os.Getenv("DSN"))
+	if err != nil {
+		t.Errorf("%s\n", err.Error())
+		return
+	}
+
+	t.Log(sid)
+
+	cid, err := Execute(sid, q)
+	if err != nil {
+		t.Errorf("%s: %s\n", sid, err.Error())
+		return
+	}
+
+	for {
+		_, eof, _ := Fetch(sid, cid, N)
+
+		if eof == true {
+			t.Logf("%s: Testing fetch after EOF", sid)
+			Fetch(sid, cid, N)
 			break
 		}
 	}
