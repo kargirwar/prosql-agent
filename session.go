@@ -24,26 +24,45 @@ import (
 type session struct {
 	id          string
 	pool        *sql.DB
-	in          chan *Req
-	out         chan *Res
 	accessTime  time.Time
 	cursorStore *cursors
 	mutex       sync.Mutex
 }
 
-func (ps *session) setAccessTime() {
-	ps.mutex.Lock()
-	defer ps.mutex.Unlock()
+func (s *session) setAccessTime() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
-	ps.accessTime = time.Now()
+	s.accessTime = time.Now()
 }
 
-func (ps *session) getAccessTime() time.Time {
-	ps.mutex.Lock()
-	defer ps.mutex.Unlock()
+func (s *session) getAccessTime() time.Time {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
-	return ps.accessTime
+	return s.accessTime
 }
+
+func (s *session) cleanup() {
+	log.Printf("%s: Handling CMD_CLEANUP\n", s.id)
+
+	keys := s.cursorStore.getKeys()
+	for _, k := range keys {
+		c, _ := s.cursorStore.get(k)
+		log.Printf("%s: Cleaning up cursor: %s\n", s.id, k)
+		c.cancel()
+
+		log.Printf("%s: Cleanup done for cursor: %s\n", s.id, k)
+		s.cursorStore.clear(k)
+		log.Printf("%s: Clear done for cursor: %s\n", s.id, k)
+	}
+
+	log.Printf("%s: Done CMD_CLEANUP\n", s.id)
+}
+
+//==============================================================//
+//          session structs and methods end
+//==============================================================//
 
 type sessions struct {
 	store map[string]*session
@@ -88,29 +107,14 @@ func (ps *sessions) clear(k string) {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
 
-	_, present := ps.store[k]
+	s, present := ps.store[k]
 	if present {
+		if s.pool != nil {
+			s.pool.Close()
+		}
+
 		delete(ps.store, k)
 	}
-}
-
-//==============================================================//
-//          session structs and methods end
-//==============================================================//
-
-type Req struct {
-	code string
-	data interface{}
-}
-
-type Res struct {
-	code string
-	data interface{}
-}
-
-type FetchReq struct {
-	cid string
-	n   int
 }
 
 //==============================================================//
@@ -147,17 +151,7 @@ func cleanupSessions() {
 				now := time.Now()
 				if now.Sub(s.getAccessTime()) > SESSION_CLEANUP_INTERVAL {
 					log.Printf("%s: Cleaning up session\n", k)
-					s.in <- &Req{
-						code: CMD_CLEANUP,
-					}
-
-					res := <-s.out
-					if res.code == ERROR {
-						//TODO: What are we going to do here?
-						log.Printf("%s: Unable to cleanup\n", k)
-						continue
-					}
-
+					s.cleanup()
 					log.Printf("%s: Cleanup done\n", k)
 					sessionStore.clear(k)
 					log.Printf("%s: Clear done\n", k)
@@ -174,14 +168,19 @@ func cleanupSessions() {
 //==============================================================//
 
 func NewSession(dbtype string, dsn string) (string, error) {
-	s, err := createSession(dbtype, dsn)
+	pool, err := sql.Open(dbtype, dsn)
+
 	if err != nil {
 		return "", err
 	}
 
-	sessionStore.set(s.id, s)
+	var s session
+	s.pool = pool
+	s.accessTime = time.Now()
+	s.id = uniuri.New()
+	s.cursorStore = NewCursorStore()
 
-	go sessionHandler(s)
+	sessionStore.set(s.id, &s)
 	return s.id, nil
 }
 
@@ -193,18 +192,15 @@ func Execute(sid string, query string) (string, error) {
 		return "", err
 	}
 
-	//we ask the session handler to create a new cursor and return its id
-	s.in <- &Req{
-		code: CMD_EXECUTE,
-		data: query,
-	}
+	log.Printf("%s: Handling CMD_EXECUTE for: %s\n", s.id, query)
 
-	res := <-s.out
-	if res.code == ERROR {
-		return "", res.data.(error)
-	}
+	c := NewCursor()
+	s.cursorStore.set(c.id, c)
+	c.start(s, query)
 
-	return res.data.(string), nil
+	log.Printf("%s: Done CMD_EXECUTE for: %s\n", s.id, query)
+
+	return c.id, nil
 }
 
 //fetch n rows from session sid using cursor cid
@@ -214,27 +210,12 @@ func Fetch(sid string, cid string, n int) (*[][]string, bool, error) {
 		return nil, false, err
 	}
 
-	s.in <- &Req{
-		code: CMD_FETCH,
-		data: FetchReq{
-			cid: cid,
-			n:   n,
-		},
+	c, err := s.cursorStore.get(cid)
+	if err != nil {
+		return nil, false, err
 	}
 
-	res := <-s.out
-	log.Printf("FETCH s: %s c: %s code %s\n", s.id, cid, res.code)
-
-	if res.code == ERROR {
-		return nil, false, res.data.(error)
-	}
-
-	var eof bool
-	if res.code == EOF {
-		eof = true
-	}
-
-	return res.data.(*[][]string), eof, nil
+	return c.fetchRows(n)
 }
 
 //cancel a running query
@@ -257,21 +238,3 @@ func Cancel(sid string, cid string) error {
 //==============================================================//
 //         External Interface End
 //==============================================================//
-
-func createSession(dbtype string, dsn string) (*session, error) {
-	pool, err := sql.Open(dbtype, dsn)
-
-	if err != nil {
-		return nil, err
-	}
-
-	var s session
-	s.pool = pool
-	s.accessTime = time.Now()
-	s.in = make(chan *Req)
-	s.out = make(chan *Res)
-	s.id = uniuri.New()
-	s.cursorStore = NewCursorStore()
-
-	return &s, nil
-}

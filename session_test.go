@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"math/rand"
 	"os"
 	"strconv"
@@ -56,6 +57,7 @@ func TestFetch(t *testing.T) {
 		}
 
 		t.Logf("Received %d rows", len(*rows))
+		log.Println(rows)
 		if eof == true {
 			break
 		}
@@ -109,7 +111,7 @@ const TEST_UNUSED_SESSION = 0
 const TEST_FETCH = 1
 const TEST_CANCEL = 2
 const STRESS_TICKER_INTERVAL = 1 * time.Second
-const STRESS_STOP_TIME = 300 * time.Second
+const STRESS_STOP_TIME = 120 * time.Second
 const CANCEL_AFTER = 2 * time.Second
 
 //create several sessions. Leave some sessions unused
