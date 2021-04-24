@@ -8,12 +8,21 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	_ "github.com/joho/godotenv/autoload"
 )
 
 const N = 1000
 
+var dsn []*DSN
+
+func TestMain(m *testing.M) {
+	dsn = parseDSN()
+	os.Exit(m.Run())
+}
+
 func TestNewSession(t *testing.T) {
-	sid, err := NewSession("mysql", os.Getenv("DSN"))
+	sid, err := NewSession("mysql", dsn[0])
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}
@@ -22,7 +31,7 @@ func TestNewSession(t *testing.T) {
 }
 
 func TestExecute(t *testing.T) {
-	sid, err := NewSession("mysql", os.Getenv("DSN"))
+	sid, err := NewSession("mysql", dsn[0])
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}
@@ -37,7 +46,7 @@ func TestExecute(t *testing.T) {
 }
 
 func TestFetch(t *testing.T) {
-	sid, err := NewSession("mysql", os.Getenv("DSN"))
+	sid, err := NewSession("mysql", dsn[0])
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}
@@ -65,7 +74,7 @@ func TestFetch(t *testing.T) {
 }
 
 func TestCancel(t *testing.T) {
-	sid, err := NewSession("mysql", os.Getenv("DSN"))
+	sid, err := NewSession("mysql", dsn[0])
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}
@@ -163,7 +172,7 @@ func startTest(t *testing.T, queries []string) {
 func testUnused(t *testing.T, queries []string) {
 	t.Logf("testUnused")
 	q := queries[rand.Intn(len(queries))]
-	sid, err := NewSession("mysql", os.Getenv("DSN"))
+	sid, err := NewSession("mysql", dsn[0])
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 		return
@@ -181,7 +190,7 @@ func testFetch(t *testing.T, queries []string) {
 	t.Logf("testFetch")
 	q := queries[rand.Intn(len(queries))]
 
-	sid, err := NewSession("mysql", os.Getenv("DSN"))
+	sid, err := NewSession("mysql", dsn[0])
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 		return
@@ -214,7 +223,7 @@ func testCancel(t *testing.T, queries []string) {
 	t.Logf("testCancel")
 	q := queries[rand.Intn(len(queries))]
 
-	sid, err := NewSession("mysql", os.Getenv("DSN"))
+	sid, err := NewSession("mysql", dsn[0])
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 		return
@@ -263,7 +272,7 @@ func TestFetchAfterEof(t *testing.T) {
 	t.Logf("testCancel")
 	q := "select * from stores"
 
-	sid, err := NewSession("mysql", os.Getenv("DSN"))
+	sid, err := NewSession("mysql", dsn[0])
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 		return

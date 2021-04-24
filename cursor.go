@@ -25,7 +25,7 @@ type cursor struct {
 	err        error
 }
 
-func (c *cursor) start(s *session, query string) error {
+func (c *cursor) execute(s *session, query string) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -53,7 +53,10 @@ func (c *cursor) getAccessTime() time.Time {
 	return c.accessTime
 }
 
-func (c *cursor) fetchRows(numRows int) (*[][]string, bool, error) {
+func (c *cursor) fetch(numRows int) (*[][]string, bool, error) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
 	cols, err := c.rows.Columns()
 	if err != nil {
 		return nil, false, err
@@ -69,7 +72,6 @@ func (c *cursor) fetchRows(numRows int) (*[][]string, bool, error) {
 		}
 
 		err = c.rows.Scan(vals...)
-		// Now you can check each element of vals for nil-ness,
 		if err != nil {
 			return nil, false, err
 		}
@@ -176,7 +178,7 @@ func NewCursorStore() *cursors {
 	}
 }
 
-func NewCursor() *cursor {
+func NewCursor(pool *sql.DB, db string) (*cursor, error) {
 	var c cursor
 	ctx, cancel := context.WithCancel(context.Background())
 	c.id = uniuri.New()
@@ -184,5 +186,10 @@ func NewCursor() *cursor {
 	c.ctx = ctx
 	c.cancel = cancel
 
-	return &c
+	_, err := pool.QueryContext(c.ctx, "use "+"`"+db+"`")
+	if err != nil {
+		return nil, err
+	}
+
+	return &c, nil
 }

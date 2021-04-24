@@ -16,3 +16,4 @@ prosql-go
 # vendor/
 tags
 *.prof
+.dsn*

@@ -10,19 +10,57 @@ package main
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/dchest/uniuri"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/joho/godotenv"
 )
+
+type DSN struct {
+	User string
+	Pass string
+	Host string
+	Port string
+	Db   string
+}
+
+func (dsn *DSN) String() string {
+	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", dsn.User, dsn.Pass, dsn.Host, dsn.Port, dsn.Db)
+}
+
+//a utility function to load multiple DSNs from files. Mostly used for testing
+func parseDSN() []*DSN {
+	var dsn []*DSN
+	for i := 1; ; i++ {
+		f := ".dsn" + strconv.Itoa(i)
+		err := godotenv.Overload(f)
+		if err != nil {
+			break
+		}
+		dsn = append(dsn, &DSN{
+			User: os.Getenv("USR"),
+			Pass: os.Getenv("PASS"),
+			Host: os.Getenv("HOST"),
+			Port: os.Getenv("PORT"),
+			Db:   os.Getenv("DB"),
+		})
+	}
+
+	return dsn
+}
 
 //==============================================================//
 //          session structs and methods
 //==============================================================//
 type session struct {
 	id          string
+	db          string
 	pool        *sql.DB
 	accessTime  time.Time
 	cursorStore *cursors
@@ -167,8 +205,8 @@ func cleanupSessions() {
 //         External Interface
 //==============================================================//
 
-func NewSession(dbtype string, dsn string) (string, error) {
-	pool, err := sql.Open(dbtype, dsn)
+func NewSession(dbtype string, dsn *DSN) (string, error) {
+	pool, err := sql.Open(dbtype, dsn.String())
 
 	if err != nil {
 		return "", err
@@ -176,6 +214,7 @@ func NewSession(dbtype string, dsn string) (string, error) {
 
 	var s session
 	s.pool = pool
+	s.db = dsn.Db
 	s.accessTime = time.Now()
 	s.id = uniuri.New()
 	s.cursorStore = NewCursorStore()
@@ -194,9 +233,13 @@ func Execute(sid string, query string) (string, error) {
 
 	log.Printf("%s: Handling CMD_EXECUTE for: %s\n", s.id, query)
 
-	c := NewCursor()
+	c, err := NewCursor(s.pool, s.db)
+	if err != nil {
+		return "", err
+	}
+
 	s.cursorStore.set(c.id, c)
-	c.start(s, query)
+	c.execute(s, query)
 
 	log.Printf("%s: Done CMD_EXECUTE for: %s\n", s.id, query)
 
@@ -215,7 +258,7 @@ func Fetch(sid string, cid string, n int) (*[][]string, bool, error) {
 		return nil, false, err
 	}
 
-	return c.fetchRows(n)
+	return c.fetch(n)
 }
 
 //cancel a running query

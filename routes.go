@@ -2,16 +2,16 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"time"
 
 	"context"
 	"database/sql"
-	_ "github.com/go-sql-driver/mysql"
 	"net/url"
 	"strconv"
+
+	_ "github.com/go-sql-driver/mysql"
 )
 
 type Response struct {
@@ -22,40 +22,49 @@ type Response struct {
 	Eof       bool        `json:"eof"`
 }
 
-func getDsn(r *http.Request) (dsn string, err error) {
+func getDsn(r *http.Request) (*DSN, error) {
 	params := r.URL.Query()
+
+	var dsn DSN
 
 	user, present := params["user"]
 	if !present || len(user) == 0 {
 		e := errors.New("User not provided")
-		return "", e
+		return nil, e
 	}
+
+	dsn.User = user[0]
 
 	pass, present := params["pass"]
 	if !present || len(pass) == 0 {
 		e := errors.New("User not provided")
-		return "", e
+		return nil, e
 	}
 
-	ip, present := params["ip"]
-	if !present || len(ip) == 0 {
-		e := errors.New("IP not provided")
-		return "", e
+	dsn.Pass = pass[0]
+
+	host, present := params["host"]
+	if !present || len(host) == 0 {
+		e := errors.New("Host not provided")
+		return nil, e
 	}
+
+	dsn.Host = host[0]
 
 	port, present := params["port"]
 	if !present || len(port) == 0 {
 		e := errors.New("Port not provided")
-		return "", e
+		return nil, e
 	}
 
-	var dbName string
+	dsn.Port = port[0]
+
 	db, present := params["db"]
 	if present && len(db) == 1 {
-		dbName = db[0]
+		dsn.Db = db[0]
 	}
 
-	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", user[0], pass[0], ip[0], port[0], dbName), nil
+	return &dsn, nil
 }
 
 func ping(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +77,7 @@ func ping(w http.ResponseWriter, r *http.Request) {
 	log.Println(dsn)
 
 	var pool *sql.DB // Database connection pool.
-	pool, err = sql.Open("mysql", dsn)
+	pool, err = sql.Open("mysql", dsn.String())
 	if err != nil {
 		sendError(w, err, ERR_DB_ERROR)
 		return
