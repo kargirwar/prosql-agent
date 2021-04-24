@@ -82,12 +82,19 @@ func (s *session) getAccessTime() time.Time {
 }
 
 func (s *session) cleanup() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
 	log.Printf("%s: Handling CMD_CLEANUP\n", s.id)
 
 	keys := s.cursorStore.getKeys()
 	for _, k := range keys {
-		c, _ := s.cursorStore.get(k)
 		log.Printf("%s: Cleaning up cursor: %s\n", s.id, k)
+		c, err := s.cursorStore.get(k)
+		if err != nil {
+			log.Printf("%s: Skipping: %s\n", s.id, k)
+			continue
+		}
 		c.cancel()
 
 		log.Printf("%s: Cleanup done for cursor: %s\n", s.id, k)
