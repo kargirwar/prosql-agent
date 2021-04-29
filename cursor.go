@@ -26,6 +26,8 @@ type cursor struct {
 }
 
 func (c *cursor) execute(s *session, query string) error {
+	defer TimeTrack(time.Now())
+
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -54,6 +56,8 @@ func (c *cursor) getAccessTime() time.Time {
 }
 
 func (c *cursor) fetch(numRows int) (*[][]string, bool, error) {
+	defer TimeTrack(time.Now())
+
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 

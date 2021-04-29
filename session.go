@@ -1,10 +1,3 @@
-/* One session corresponds to one tab in the browser. If the tab is duplicated
-they will share the session. Each session can execute multiple queries. Each
-query will be associated with a cursor. A cursor can be queried untill all
-rows have been read*/
-/* There is one goroutine corresponding to each session. Similarly there
-is one goroutine per cursor */
-
 package main
 
 import (
@@ -233,6 +226,8 @@ func NewSession(dbtype string, dsn *DSN) (string, error) {
 //execute a query and create a cursor for the results
 //results must be retrieved by calling fetch later with the cursor id
 func Execute(sid string, query string) (string, error) {
+	defer TimeTrack(time.Now())
+
 	s, err := sessionStore.get(sid)
 	if err != nil {
 		return "", err
@@ -255,6 +250,8 @@ func Execute(sid string, query string) (string, error) {
 
 //fetch n rows from session sid using cursor cid
 func Fetch(sid string, cid string, n int) (*[][]string, bool, error) {
+	defer TimeTrack(time.Now())
+
 	s, err := sessionStore.get(sid)
 	if err != nil {
 		return nil, false, err
@@ -279,6 +276,8 @@ func Fetch(sid string, cid string, n int) (*[][]string, bool, error) {
 
 //cancel a running query
 func Cancel(sid string, cid string) error {
+	defer TimeTrack(time.Now())
+
 	s, err := sessionStore.get(sid)
 	if err != nil {
 		return err

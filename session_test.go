@@ -38,8 +38,8 @@ func TestExecute(t *testing.T) {
 
 	t.Log(sid)
 
-	//_, err = Execute(sid, "select * from users")
-	_, err = Execute(sid, "select sleep (10)")
+	_, err = Execute(sid, "select * from users")
+	//_, err = Execute(sid, "select sleep (10)")
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}
@@ -53,7 +53,7 @@ func TestFetch(t *testing.T) {
 
 	t.Log(sid)
 
-	cid, err := Execute(sid, "select * from users")
+	cid, err := Execute(sid, "select * from users limit 1")
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}

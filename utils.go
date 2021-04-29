@@ -4,11 +4,35 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
+	"regexp"
+	"runtime"
+	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
+
+func init() {
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+}
+
+func TimeTrack(start time.Time) {
+	elapsed := time.Since(start)
+
+	// Skip this function, and fetch the PC and file for its parent.
+	pc, _, _, _ := runtime.Caller(1)
+
+	// Retrieve a function object this functions parent.
+	funcObj := runtime.FuncForPC(pc)
+
+	// Regex to extract just the function name (and not the module path).
+	runtimeFunc := regexp.MustCompile(`^.*\.(.*)$`)
+	name := runtimeFunc.ReplaceAllString(funcObj.Name(), "$1")
+
+	log.Print(fmt.Sprintf("%s took %s", name, elapsed))
+}
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
@@ -27,13 +51,13 @@ func echo(w http.ResponseWriter, r *http.Request) {
 	for {
 		mt, message, err := c.ReadMessage()
 		if err != nil {
-			log.Println("read:", err)
+			log.Print("read:", err)
 			break
 		}
 		log.Printf("recv: %s", message)
 		err = c.WriteMessage(mt, message)
 		if err != nil {
-			log.Println("write:", err)
+			log.Print("write:", err)
 			break
 		}
 	}
@@ -48,14 +72,14 @@ func sessionDumper(next http.Handler) http.Handler {
 			log.Printf("s: %s\n", sk)
 			s, _ := sessionStore.get(sk)
 			if s == nil {
-				log.Println("session " + sk + " is nil")
+				log.Print("session " + sk + " is nil")
 				continue
 			}
 			ckeys := s.cursorStore.getKeys()
 			for _, ck := range ckeys {
 				c, _ := s.cursorStore.get(ck)
 				if c == nil {
-					log.Println("cursor " + ck + " is nil")
+					log.Print("cursor " + ck + " is nil")
 					continue
 				}
 

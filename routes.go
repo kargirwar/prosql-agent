@@ -118,6 +118,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 }
 
 func execute(w http.ResponseWriter, r *http.Request) {
+	defer TimeTrack(time.Now())
 	query, sid, err := getExecuteParams(r)
 
 	if err != nil {
