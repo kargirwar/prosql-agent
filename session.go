@@ -265,7 +265,16 @@ func Fetch(sid string, cid string, n int) (*[][]string, bool, error) {
 		return nil, false, err
 	}
 
-	return c.fetch(n)
+	rows, eof, err := c.fetch(n)
+	if err != nil {
+		return nil, false, err
+	}
+
+	if eof {
+		s.cursorStore.clear(cid)
+	}
+
+	return rows, eof, nil
 }
 
 //cancel a running query

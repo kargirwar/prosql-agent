@@ -10,5 +10,6 @@ require (
 	github.com/gorilla/websocket v1.4.2
 	github.com/ianlancetaylor/demangle v0.0.0-20210406231658-61c622dd7d50 // indirect
 	github.com/joho/godotenv v1.3.0 // indirect
+	github.com/rs/zerolog v1.21.0 // indirect
 	golang.org/x/sys v0.0.0-20210414055047-fe65e336abe0 // indirect
 )

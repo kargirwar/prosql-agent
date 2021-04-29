@@ -20,6 +20,10 @@ var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
 var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
 var mp *os.File
 
+func init() {
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+}
+
 func main() {
 	//profiling
 	flag.Parse()

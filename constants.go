@@ -2,7 +2,7 @@ package main
 
 import "time"
 
-const SESSION_CLEANUP_INTERVAL = 120 * time.Minute
+const SESSION_CLEANUP_INTERVAL = 5 * time.Minute
 
 //const CURSOR_CLEANUP_INTERVAL = 10 * time.Minute
 //const SESSION_CLEANUP_INTERVAL = 20 * time.Second
