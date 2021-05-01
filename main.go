@@ -54,6 +54,7 @@ func main() {
 	r.Use(sessionDumper)
 	r.HandleFunc("/ping", ping).Methods(http.MethodGet, http.MethodOptions)
 	r.HandleFunc("/login", login).Methods(http.MethodGet, http.MethodOptions)
+	r.HandleFunc("/set-db", setDb).Methods(http.MethodGet, http.MethodOptions)
 	r.HandleFunc("/execute", execute).Methods(http.MethodGet, http.MethodOptions)
 	r.HandleFunc("/fetch", fetch).Methods(http.MethodGet, http.MethodOptions)
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"time"
 
@@ -62,6 +63,9 @@ func cleanupCursors(s *session) {
 func handleSessionRequest(s *session, req *Req) {
 	s.setAccessTime()
 	switch req.code {
+	case CMD_SET_DB:
+		handleSetDb(s, req)
+
 	case CMD_EXECUTE:
 		handleExecute(s, req)
 
@@ -103,6 +107,31 @@ func handleCleanup(s *session, req *Req) {
 	}
 
 	log.Printf("%s: Done CMD_CLEANUP\n", s.id)
+}
+
+func handleSetDb(s *session, req *Req) {
+	db, _ := req.data.(string)
+	log.Printf("%s: Handling CMD_SET_DB for: %s\n", s.id, db)
+	//clear all existing cursors
+	cleanupCursors(s)
+
+	rows, err := s.pool.QueryContext(context.Background(), "use `"+db+"`")
+	if err != nil {
+		s.out <- &Res{
+			code: ERROR,
+			data: err,
+		}
+
+		return
+	}
+
+	rows.Close()
+
+	s.out <- &Res{
+		code: SUCCESS,
+	}
+
+	log.Printf("%s: Done CMD_SET_DB for: %s\n", s.id, db)
 }
 
 func handleExecute(s *session, req *Req) {

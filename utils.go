@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
+	"runtime"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -15,6 +18,22 @@ var upgrader = websocket.Upgrader{
 		//todo: enforce some rules here
 		return true
 	},
+}
+
+func TimeTrack(start time.Time) {
+	elapsed := time.Since(start)
+
+	// Skip this function, and fetch the PC and file for its parent.
+	pc, _, _, _ := runtime.Caller(1)
+
+	// Retrieve a function object this functions parent.
+	funcObj := runtime.FuncForPC(pc)
+
+	// Regex to extract just the function name (and not the module path).
+	runtimeFunc := regexp.MustCompile(`^.*\.(.*)$`)
+	name := runtimeFunc.ReplaceAllString(funcObj.Name(), "$1")
+
+	log.Print(fmt.Sprintf("%s took %s", name, elapsed))
 }
 
 func echo(w http.ResponseWriter, r *http.Request) {
@@ -59,7 +78,7 @@ func sessionDumper(next http.Handler) http.Handler {
 					continue
 				}
 
-				log.Printf("    c: %s\n", ck)
+				log.Printf("    c: %s query: %s\n", ck, c.query)
 			}
 		}
 		next.ServeHTTP(w, r)

@@ -109,8 +109,26 @@ func login(w http.ResponseWriter, r *http.Request) {
 	log.Printf("sendSuccess")
 }
 
+func setDb(w http.ResponseWriter, r *http.Request) {
+	sid, db, err := getSetDbParams(r)
+
+	if err != nil {
+		sendError(w, err, ERR_INVALID_USER_INPUT)
+		return
+	}
+
+	err = SetDb(sid, db)
+
+	if err != nil {
+		sendError(w, err, ERR_DB_ERROR)
+		return
+	}
+
+	sendSuccess(w, nil, false)
+}
+
 func execute(w http.ResponseWriter, r *http.Request) {
-	query, sid, err := getExecuteParams(r)
+	sid, query, err := getExecuteParams(r)
 
 	if err != nil {
 		sendError(w, err, ERR_INVALID_USER_INPUT)
@@ -124,7 +142,9 @@ func execute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendSuccess(w, cid, false)
+	sendSuccess(w, struct {
+		CursorId string `json:"cursor-id"`
+	}{cid}, false)
 }
 
 func fetch(w http.ResponseWriter, r *http.Request) {
@@ -174,6 +194,24 @@ func getFetchParams(r *http.Request) (string, string, int, error) {
 	return sid[0], cid[0], n, nil
 }
 
+func getSetDbParams(r *http.Request) (string, string, error) {
+	params := r.URL.Query()
+
+	sid, present := params["session-id"]
+	if !present || len(sid) == 0 {
+		e := errors.New("Session ID not provided")
+		return "", "", e
+	}
+
+	db, present := params["db"]
+	if !present || len(db) == 0 {
+		e := errors.New("Db not provided")
+		return "", "", e
+	}
+
+	return sid[0], db[0], nil
+}
+
 func getExecuteParams(r *http.Request) (string, string, error) {
 	params := r.URL.Query()
 
@@ -194,5 +232,5 @@ func getExecuteParams(r *http.Request) (string, string, error) {
 		return "", "", err
 	}
 
-	return q, sid[0], nil
+	return sid[0], q, nil
 }

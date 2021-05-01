@@ -20,6 +20,7 @@ const CMD_EXECUTE = "execute"
 const CMD_FETCH = "fetch"
 const CMD_CANCEL = "cancel"
 const CMD_CLEANUP = "cleanup"
+const CMD_SET_DB = "set-db"
 
 //statuses
 const SUCCESS = "success"

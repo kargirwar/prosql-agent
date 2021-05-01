@@ -26,6 +26,7 @@ type cursor struct {
 	ctx        context.Context
 	mutex      sync.Mutex
 	err        error
+	query      string
 }
 
 func (pc *cursor) start(s *session, query string) error {
@@ -39,6 +40,8 @@ func (pc *cursor) start(s *session, query string) error {
 	}
 
 	pc.rows = rows
+	pc.query = query
+
 	return nil
 }
 
@@ -175,6 +178,7 @@ func handleCursorRequest(c *cursor, req *Req) *Res {
 		fetchReq, _ := req.data.(FetchReq)
 		rows, err := fetchRows(c, fetchReq)
 		if err != nil {
+			log.Printf("%s: %s\n", c.id, err.Error())
 			return &Res{
 				code: ERROR,
 				data: err,
