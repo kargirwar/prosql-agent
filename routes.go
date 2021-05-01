@@ -9,9 +9,10 @@ import (
 
 	"context"
 	"database/sql"
-	_ "github.com/go-sql-driver/mysql"
 	"net/url"
 	"strconv"
+
+	_ "github.com/go-sql-driver/mysql"
 )
 
 type Response struct {
@@ -37,9 +38,9 @@ func getDsn(r *http.Request) (dsn string, err error) {
 		return "", e
 	}
 
-	ip, present := params["ip"]
-	if !present || len(ip) == 0 {
-		e := errors.New("IP not provided")
+	host, present := params["host"]
+	if !present || len(host) == 0 {
+		e := errors.New("Host not provided")
 		return "", e
 	}
 
@@ -55,7 +56,7 @@ func getDsn(r *http.Request) (dsn string, err error) {
 		dbName = db[0]
 	}
 
-	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", user[0], pass[0], ip[0], port[0], dbName), nil
+	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", user[0], pass[0], host[0], port[0], dbName), nil
 }
 
 func ping(w http.ResponseWriter, r *http.Request) {
