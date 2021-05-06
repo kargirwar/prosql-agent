@@ -22,6 +22,22 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+func TimeTrackTest(start time.Time) {
+	elapsed := time.Since(start)
+
+	// Skip this function, and fetch the PC and file for its parent.
+	pc, _, _, _ := runtime.Caller(1)
+
+	// Retrieve a function object this functions parent.
+	funcObj := runtime.FuncForPC(pc)
+
+	// Regex to extract just the function name (and not the module path).
+	runtimeFunc := regexp.MustCompile(`^.*\.(.*)$`)
+	name := runtimeFunc.ReplaceAllString(funcObj.Name(), "$1")
+
+	log.Print(fmt.Sprintf("%s took %s", name, elapsed))
+}
+
 func TimeTrack(ctx context.Context, start time.Time) {
 	elapsed := time.Since(start)
 
@@ -152,5 +168,10 @@ func requestIDSetter(next http.Handler) http.Handler {
 }
 
 func reqId(ctx context.Context) string {
-	return ctx.Value(requestIDKey{}).(string)
+	id, ok := ctx.Value(requestIDKey{}).(string)
+	if ok {
+		return id
+	}
+
+	return "req-id"
 }

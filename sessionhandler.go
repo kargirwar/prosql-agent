@@ -20,7 +20,7 @@ loop:
 	for {
 		select {
 		case req := <-s.in:
-			handleSessionRequest(s, req)
+			go handleSessionRequest(s, req)
 
 			if req.code == CMD_CLEANUP {
 				log.Printf("Shutting down session handler for %s\n", s.id)
@@ -105,7 +105,7 @@ func handleCleanup(s *session, req *Req) {
 		log.Printf("%s: Clear done for cursor: %s\n", s.id, k)
 	}
 
-	s.out <- &Res{
+	req.resChan <- &Res{
 		code: CLEANUP_DONE,
 	}
 
@@ -120,7 +120,7 @@ func handleSetDb(s *session, req *Req) {
 
 	rows, err := s.pool.QueryContext(context.Background(), "use `"+db+"`")
 	if err != nil {
-		s.out <- &Res{
+		req.resChan <- &Res{
 			code: ERROR,
 			data: err,
 		}
@@ -130,7 +130,7 @@ func handleSetDb(s *session, req *Req) {
 
 	rows.Close()
 
-	s.out <- &Res{
+	req.resChan <- &Res{
 		code: SUCCESS,
 	}
 
@@ -149,7 +149,7 @@ func handleExecute(s *session, req *Req) {
 
 	Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_EXECUTE for: %s\n", s.id, query))
 
-	s.out <- &Res{
+	req.resChan <- &Res{
 		code: SUCCESS,
 		data: c.id,
 	}
@@ -163,7 +163,7 @@ func handleFetch(s *session, req *Req) {
 	c, err := s.cursorStore.get(fetchReq.cid)
 
 	if err != nil {
-		s.out <- &Res{
+		req.resChan <- &Res{
 			code: ERROR,
 			data: err,
 		}
@@ -181,7 +181,7 @@ func handleFetch(s *session, req *Req) {
 		Dbg(req.ctx, fmt.Sprintf("%s: clearing cursor %s\n", s.id, c.id))
 		s.cursorStore.clear(c.id)
 	}
-	s.out <- res
+	req.resChan <- res
 }
 
 func handleCancel(s *session, req *Req) {
@@ -191,7 +191,7 @@ func handleCancel(s *session, req *Req) {
 	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_CANCEL for: %s\n", s.id, c.id))
 
 	if err != nil {
-		s.out <- &Res{
+		req.resChan <- &Res{
 			code: ERROR,
 			data: err,
 		}
@@ -201,7 +201,7 @@ func handleCancel(s *session, req *Req) {
 	c.cancel()
 	s.cursorStore.clear(cid)
 
-	s.out <- &Res{
+	req.resChan <- &Res{
 		code: SUCCESS,
 	}
 	Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_CANCEL for: %s\n", s.id, c.id))

@@ -36,11 +36,15 @@ func (pc *cursor) start(ctx context.Context, s *session, query string) error {
 	pc.mutex.Lock()
 	defer pc.mutex.Unlock()
 
+	Dbg(ctx, "Starting query: "+query)
+
 	rows, err := s.pool.QueryContext(pc.ctx, query)
 	if err != nil {
 		pc.err = err
 		return err
 	}
+
+	Dbg(ctx, "Done query: "+query)
 
 	pc.rows = rows
 	pc.query = query

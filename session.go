@@ -101,9 +101,10 @@ func (ps *sessions) clear(k string) {
 //==============================================================//
 
 type Req struct {
-	ctx  context.Context
-	code string
-	data interface{}
+	ctx     context.Context
+	code    string
+	data    interface{}
+	resChan chan *Res
 }
 
 type Res struct {
@@ -224,15 +225,17 @@ func Execute(ctx context.Context, sid string, query string) (string, error) {
 	Dbg(ctx, fmt.Sprintf("session id: %s", s.id))
 
 	//we ask the session handler to create a new cursor and return its id
+	ch := make(chan *Res)
 	s.in <- &Req{
-		ctx:  ctx,
-		code: CMD_EXECUTE,
-		data: query,
+		ctx:     ctx,
+		code:    CMD_EXECUTE,
+		data:    query,
+		resChan: ch,
 	}
 
 	Dbg(ctx, fmt.Sprintf("%s Send CMD_EXECUTE for %s", s.id, query))
 
-	res := <-s.out
+	res := <-ch
 	if res.code == ERROR {
 		return "", res.data.(error)
 	}
@@ -250,6 +253,7 @@ func Fetch(ctx context.Context, sid string, cid string, n int) (*[][]string, boo
 		return nil, false, err
 	}
 
+	ch := make(chan *Res)
 	s.in <- &Req{
 		ctx:  ctx,
 		code: CMD_FETCH,
@@ -257,9 +261,10 @@ func Fetch(ctx context.Context, sid string, cid string, n int) (*[][]string, boo
 			cid: cid,
 			n:   n,
 		},
+		resChan: ch,
 	}
 
-	res := <-s.out
+	res := <-ch
 	log.Printf("FETCH s: %s c: %s code %s\n", s.id, cid, res.code)
 
 	if res.code == ERROR {
@@ -306,10 +311,17 @@ func createSession(ctx context.Context, dbtype string, dsn string) (*session, er
 		return nil, err
 	}
 
+	ctx1, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+
+	if err := pool.PingContext(ctx1); err != nil {
+		return nil, err
+	}
+
 	var s session
 	s.pool = pool
 	s.accessTime = time.Now()
-	s.in = make(chan *Req)
+	s.in = make(chan *Req, 100)
 	s.out = make(chan *Res)
 	s.id = uniuri.New()
 	s.cursorStore = NewCursorStore()

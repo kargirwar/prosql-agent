@@ -12,7 +12,8 @@ import (
 const N = 1000
 
 func TestNewSession(t *testing.T) {
-	sid, err := NewSession("mysql", os.Getenv("DSN"))
+	ctx := context.Background()
+	sid, err := NewSession(ctx, "mysql", os.Getenv("DSN"))
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}
@@ -21,7 +22,8 @@ func TestNewSession(t *testing.T) {
 }
 
 func TestExecute(t *testing.T) {
-	sid, err := NewSession("mysql", os.Getenv("DSN"))
+	ctx := context.Background()
+	sid, err := NewSession(ctx, "mysql", os.Getenv("DSN"))
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}
@@ -29,27 +31,28 @@ func TestExecute(t *testing.T) {
 	t.Log(sid)
 
 	//_, err = Execute(sid, "select * from users")
-	_, err = Execute(sid, "select sleep (10)")
+	_, err = Execute(ctx, sid, "select sleep (10)")
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}
 }
 
 func TestFetch(t *testing.T) {
-	sid, err := NewSession("mysql", os.Getenv("DSN"))
+	ctx := context.Background()
+	sid, err := NewSession(ctx, "mysql", os.Getenv("DSN"))
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}
 
 	t.Log(sid)
 
-	cid, err := Execute(sid, "select * from users")
+	cid, err := Execute(ctx, sid, "select * from users limit 999")
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}
 
 	for {
-		rows, eof, err := Fetch(sid, cid, N)
+		rows, eof, err := Fetch(ctx, sid, cid, N)
 		if err != nil {
 			t.Errorf("%s\n", err.Error())
 			break
@@ -63,14 +66,15 @@ func TestFetch(t *testing.T) {
 }
 
 func TestCancel(t *testing.T) {
-	sid, err := NewSession("mysql", os.Getenv("DSN"))
+	ctx := context.Background()
+	sid, err := NewSession(ctx, "mysql", os.Getenv("DSN"))
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}
 
 	t.Log(sid)
 
-	cid, err := Execute(sid, "select sleep(10)")
+	cid, err := Execute(ctx, sid, "select sleep(10)")
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}
@@ -79,14 +83,14 @@ func TestCancel(t *testing.T) {
 	t1 := time.NewTimer(2 * time.Second)
 	go func() {
 		<-t1.C
-		err := Cancel(sid, cid)
+		err := Cancel(ctx, sid, cid)
 		if err != nil {
 			t.Errorf("%s\n", err.Error())
 		}
 	}()
 
 	for {
-		rows, eof, err := Fetch(sid, cid, N)
+		rows, eof, err := Fetch(ctx, sid, cid, N)
 		if err == context.Canceled {
 			//expected
 			t.Logf("%s: Breaking due to context canceled", sid)
@@ -159,9 +163,10 @@ func startTest(t *testing.T, queries []string) {
 }
 
 func testUnused(t *testing.T, queries []string) {
+	ctx := context.Background()
 	t.Logf("testUnused")
 	q := queries[rand.Intn(len(queries))]
-	sid, err := NewSession("mysql", os.Getenv("DSN"))
+	sid, err := NewSession(ctx, "mysql", os.Getenv("DSN"))
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 		return
@@ -169,17 +174,18 @@ func testUnused(t *testing.T, queries []string) {
 
 	t.Log(sid)
 
-	_, err = Execute(sid, q)
+	_, err = Execute(ctx, sid, q)
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}
 }
 
 func testFetch(t *testing.T, queries []string) {
+	ctx := context.Background()
 	t.Logf("testFetch")
 	q := queries[rand.Intn(len(queries))]
 
-	sid, err := NewSession("mysql", os.Getenv("DSN"))
+	sid, err := NewSession(ctx, "mysql", os.Getenv("DSN"))
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 		return
@@ -187,14 +193,14 @@ func testFetch(t *testing.T, queries []string) {
 
 	t.Log(sid)
 
-	cid, err := Execute(sid, q)
+	cid, err := Execute(ctx, sid, q)
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 		return
 	}
 
 	for {
-		rows, eof, err := Fetch(sid, cid, N)
+		rows, eof, err := Fetch(ctx, sid, cid, N)
 		if err != nil {
 			t.Errorf("%s: %s", sid, err.Error())
 			break
@@ -209,10 +215,11 @@ func testFetch(t *testing.T, queries []string) {
 }
 
 func testCancel(t *testing.T, queries []string) {
+	ctx := context.Background()
 	t.Logf("testCancel")
 	q := queries[rand.Intn(len(queries))]
 
-	sid, err := NewSession("mysql", os.Getenv("DSN"))
+	sid, err := NewSession(ctx, "mysql", os.Getenv("DSN"))
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 		return
@@ -220,7 +227,7 @@ func testCancel(t *testing.T, queries []string) {
 
 	t.Log(sid)
 
-	cid, err := Execute(sid, q)
+	cid, err := Execute(ctx, sid, q)
 	if err != nil {
 		t.Errorf("%s: %s\n", sid, err.Error())
 		return
@@ -230,14 +237,14 @@ func testCancel(t *testing.T, queries []string) {
 	t1 := time.NewTimer(CANCEL_AFTER)
 	go func() {
 		<-t1.C
-		err := Cancel(sid, cid)
+		err := Cancel(ctx, sid, cid)
 		if err != nil {
 			t.Errorf("%s: %s\n", sid, err.Error())
 		}
 	}()
 
 	for {
-		rows, eof, err := Fetch(sid, cid, N)
+		rows, eof, err := Fetch(ctx, sid, cid, N)
 		if err == context.Canceled {
 			//expected
 			t.Logf("%s: Breaking due to context canceled", sid)
@@ -258,10 +265,11 @@ func testCancel(t *testing.T, queries []string) {
 }
 
 func TestFetchAfterEof(t *testing.T) {
+	ctx := context.Background()
 	t.Logf("testCancel")
 	q := "select * from stores"
 
-	sid, err := NewSession("mysql", os.Getenv("DSN"))
+	sid, err := NewSession(ctx, "mysql", os.Getenv("DSN"))
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 		return
@@ -269,18 +277,18 @@ func TestFetchAfterEof(t *testing.T) {
 
 	t.Log(sid)
 
-	cid, err := Execute(sid, q)
+	cid, err := Execute(ctx, sid, q)
 	if err != nil {
 		t.Errorf("%s: %s\n", sid, err.Error())
 		return
 	}
 
 	for {
-		_, eof, _ := Fetch(sid, cid, N)
+		_, eof, _ := Fetch(ctx, sid, cid, N)
 
 		if eof == true {
 			t.Logf("%s: Testing fetch after EOF", sid)
-			Fetch(sid, cid, N)
+			Fetch(ctx, sid, cid, N)
 			break
 		}
 	}

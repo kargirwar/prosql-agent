@@ -17,6 +17,7 @@ var creds = map[string]string{
 	"pass": "dev-server",
 	"host": "127.0.0.1",
 	"port": "3306",
+	"db":   "test-generico",
 }
 
 const N = 1000
@@ -40,30 +41,30 @@ func TestClientLogin(t *testing.T) {
 	fetch_test(t, sid, cid)
 
 	//select database
-	setdb_test(t, sid, "test-generico")
+	//setdb_test(t, sid, "test-generico")
 	//get data
 	cid = execute_test(t, sid, "select * from inventory limit 1000")
-	rows := fetch_test(t, sid, cid)
-	t.Log(rows)
+	fetch_test(t, sid, cid)
+	//t.Log(rows)
 
 	//change database
 	//setdb_test(t, sid, "dev3-generico")
 	//get data
 	cid = execute_test(t, sid, "select * from users limit 1")
-	rows = fetch_test(t, sid, cid)
-	t.Log(rows)
+	fetch_test(t, sid, cid)
+	//t.Log(rows)
 
 	//change database
-	setdb_test(t, sid, "test-generico")
+	//setdb_test(t, sid, "test-generico")
 	//get data
 	cid = execute_test(t, sid, "select * from `invoice-items-1` limit 1000")
-	rows = fetch_test(t, sid, cid)
+	fetch_test(t, sid, cid)
 
-	t.Log(rows)
+	//t.Log(rows)
 }
 
 func login_test(t *testing.T) string {
-	defer TimeTrack(time.Now())
+	defer TimeTrackTest(time.Now())
 
 	r := &Response{}
 
@@ -77,7 +78,7 @@ func login_test(t *testing.T) string {
 }
 
 func setdb_test(t *testing.T, sid, db string) {
-	defer TimeTrack(time.Now())
+	defer TimeTrackTest(time.Now())
 
 	r := &Response{}
 	params := map[string]string{
@@ -96,7 +97,7 @@ func setdb_test(t *testing.T, sid, db string) {
 }
 
 func execute_test(t *testing.T, sid, query string) string {
-	defer TimeTrack(time.Now())
+	defer TimeTrackTest(time.Now())
 
 	r := &Response{}
 	params := map[string]string{
@@ -117,7 +118,7 @@ func execute_test(t *testing.T, sid, query string) string {
 }
 
 func fetch_test(t *testing.T, sid, cid string) interface{} {
-	defer TimeTrack(time.Now())
+	defer TimeTrackTest(time.Now())
 
 	r := &Response{}
 	params := map[string]string{
