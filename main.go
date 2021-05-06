@@ -1,57 +1,41 @@
 package main
 
 import (
+	"flag"
 	_ "fmt"
-	"log"
 	"net/http"
 	"os"
-	"runtime"
-	"runtime/pprof"
-
-	"flag"
+	"strconv"
 
 	_ "net/http/pprof"
 
 	"github.com/gorilla/mux"
 	_ "github.com/gorilla/websocket"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
-var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
-var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
-var mp *os.File
-
 func main() {
-	//profiling
+
+	//logging setup
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnixMs
+	//debug := flag.Bool("debug", false, "sets log level to debug")
+
 	flag.Parse()
-	if *cpuprofile != "" {
-		f, err := os.Create(*cpuprofile)
-		if err != nil {
-			log.Fatal("could not create CPU profile: ", err)
-		}
-		defer f.Close() // error handling omitted for example
-		if err := pprof.StartCPUProfile(f); err != nil {
-			log.Fatal("could not start CPU profile: ", err)
-		}
-		defer pprof.StopCPUProfile()
-	}
 
-	// ... rest of the program ...
-
-	if *memprofile != "" {
-		mp, err := os.Create(*memprofile)
-		if err != nil {
-			log.Fatal("could not create memory profile: ", err)
-		}
-		defer mp.Close() // error handling omitted for example
-		runtime.GC()     // get up-to-date statistics
-		//if err := pprof.WriteHeapProfile(f); err != nil {
-		//log.Fatal("could not write memory profile: ", err)
-		//}
-	}
+	//zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	//if *debug {
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	//}
 
 	r := mux.NewRouter()
+
+	//middleware
 	r.Use(mw)
+	r.Use(requestIDSetter)
 	r.Use(sessionDumper)
+
+	//routes
 	r.HandleFunc("/ping", ping).Methods(http.MethodGet, http.MethodOptions)
 	r.HandleFunc("/login", login).Methods(http.MethodGet, http.MethodOptions)
 	r.HandleFunc("/set-db", setDb).Methods(http.MethodGet, http.MethodOptions)
@@ -59,5 +43,10 @@ func main() {
 	r.HandleFunc("/fetch", fetch).Methods(http.MethodGet, http.MethodOptions)
 
 	http.Handle("/", r)
-	log.Fatal(http.ListenAndServe(":23890", nil))
+
+	log.Info().Msg("prosql-agent Listening at:" + strconv.Itoa(PORT))
+	if err := http.ListenAndServe(":"+strconv.Itoa(PORT), nil); err != nil {
+		log.Fatal().Msg(err.Error())
+		os.Exit(-1)
+	}
 }

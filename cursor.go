@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"time"
 
@@ -29,7 +30,9 @@ type cursor struct {
 	query      string
 }
 
-func (pc *cursor) start(s *session, query string) error {
+func (pc *cursor) start(ctx context.Context, s *session, query string) error {
+	defer TimeTrack(ctx, time.Now())
+
 	pc.mutex.Lock()
 	defer pc.mutex.Unlock()
 
@@ -160,7 +163,7 @@ loop:
 			c.out <- res
 			if res.code == ERROR || res.code == EOF {
 				//Whatever the error we should exit
-				log.Printf("%s: Shutting down cursorHandler due to %s\n", c.id, res.code)
+				Dbg(req.ctx, fmt.Sprintf("%s: Shutting down cursorHandler due to %s\n", c.id, res.code))
 				break loop
 			}
 
@@ -172,20 +175,22 @@ loop:
 }
 
 func handleCursorRequest(c *cursor, req *Req) *Res {
+	defer TimeTrack(req.ctx, time.Now())
+
 	switch req.code {
 	case CMD_FETCH:
-		log.Printf("%s: Handling CMD_FETCH\n", c.id)
+		Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_FETCH\n", c.id))
 		fetchReq, _ := req.data.(FetchReq)
 		rows, err := fetchRows(c, fetchReq)
 		if err != nil {
-			log.Printf("%s: %s\n", c.id, err.Error())
+			Dbg(req.ctx, fmt.Sprintf("%s: %s\n", c.id, err.Error()))
 			return &Res{
 				code: ERROR,
 				data: err,
 			}
 		}
 
-		log.Printf("%s: Done CMD_FETCH\n", c.id)
+		Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_FETCH\n", c.id))
 
 		var code string
 		if len(*rows) < fetchReq.n {
@@ -200,7 +205,7 @@ func handleCursorRequest(c *cursor, req *Req) *Res {
 		}
 
 	default:
-		log.Printf("%s: Invalid Command\n", c.id)
+		Dbg(req.ctx, fmt.Sprintf("%s: Invalid Command\n", c.id))
 		return &Res{
 			code: ERROR,
 			data: errors.New(ERR_INVALID_CURSOR_CMD),

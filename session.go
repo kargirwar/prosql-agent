@@ -8,8 +8,10 @@ is one goroutine per cursor */
 package main
 
 import (
+	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -99,11 +101,13 @@ func (ps *sessions) clear(k string) {
 //==============================================================//
 
 type Req struct {
+	ctx  context.Context
 	code string
 	data interface{}
 }
 
 type Res struct {
+	ctx  context.Context
 	code string
 	data interface{}
 }
@@ -173,8 +177,10 @@ func cleanupSessions() {
 //         External Interface
 //==============================================================//
 
-func NewSession(dbtype string, dsn string) (string, error) {
-	s, err := createSession(dbtype, dsn)
+func NewSession(ctx context.Context, dbtype string, dsn string) (string, error) {
+	defer TimeTrack(ctx, time.Now())
+
+	s, err := createSession(ctx, dbtype, dsn)
 	if err != nil {
 		return "", err
 	}
@@ -186,7 +192,6 @@ func NewSession(dbtype string, dsn string) (string, error) {
 }
 
 func SetDb(sid string, db string) error {
-	defer TimeTrack(time.Now())
 
 	s, err := sessionStore.get(sid)
 	if err != nil {
@@ -208,31 +213,37 @@ func SetDb(sid string, db string) error {
 
 //execute a query and create a cursor for the results
 //results must be retrieved by calling fetch later with the cursor id
-func Execute(sid string, query string) (string, error) {
-	defer TimeTrack(time.Now())
+func Execute(ctx context.Context, sid string, query string) (string, error) {
+	defer TimeTrack(ctx, time.Now())
 
 	s, err := sessionStore.get(sid)
 	if err != nil {
 		return "", err
 	}
 
+	Dbg(ctx, fmt.Sprintf("session id: %s", s.id))
+
 	//we ask the session handler to create a new cursor and return its id
 	s.in <- &Req{
+		ctx:  ctx,
 		code: CMD_EXECUTE,
 		data: query,
 	}
+
+	Dbg(ctx, fmt.Sprintf("%s Send CMD_EXECUTE for %s", s.id, query))
 
 	res := <-s.out
 	if res.code == ERROR {
 		return "", res.data.(error)
 	}
 
+	Dbg(ctx, fmt.Sprintf("%s Received Response for %s", s.id, query))
 	return res.data.(string), nil
 }
 
 //fetch n rows from session sid using cursor cid
-func Fetch(sid string, cid string, n int) (*[][]string, bool, error) {
-	defer TimeTrack(time.Now())
+func Fetch(ctx context.Context, sid string, cid string, n int) (*[][]string, bool, error) {
+	defer TimeTrack(ctx, time.Now())
 
 	s, err := sessionStore.get(sid)
 	if err != nil {
@@ -240,6 +251,7 @@ func Fetch(sid string, cid string, n int) (*[][]string, bool, error) {
 	}
 
 	s.in <- &Req{
+		ctx:  ctx,
 		code: CMD_FETCH,
 		data: FetchReq{
 			cid: cid,
@@ -263,8 +275,8 @@ func Fetch(sid string, cid string, n int) (*[][]string, bool, error) {
 }
 
 //cancel a running query
-func Cancel(sid string, cid string) error {
-	defer TimeTrack(time.Now())
+func Cancel(ctx context.Context, sid string, cid string) error {
+	defer TimeTrack(ctx, time.Now())
 
 	s, err := sessionStore.get(sid)
 	if err != nil {
@@ -285,7 +297,9 @@ func Cancel(sid string, cid string) error {
 //         External Interface End
 //==============================================================//
 
-func createSession(dbtype string, dsn string) (*session, error) {
+func createSession(ctx context.Context, dbtype string, dsn string) (*session, error) {
+	defer TimeTrack(ctx, time.Now())
+
 	pool, err := sql.Open(dbtype, dsn)
 
 	if err != nil {

@@ -33,6 +33,7 @@ func TestClientLogin(t *testing.T) {
 	sid := login_test(t)
 	//get db list
 	cid := execute_test(t, sid, "show databases")
+	fetch_test(t, sid, cid)
 
 	//get table list
 	cid = execute_test(t, sid, "show tables from `test-generico`")

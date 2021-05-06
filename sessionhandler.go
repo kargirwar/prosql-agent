@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -61,6 +62,8 @@ func cleanupCursors(s *session) {
 }
 
 func handleSessionRequest(s *session, req *Req) {
+	defer TimeTrack(req.ctx, time.Now())
+
 	s.setAccessTime()
 	switch req.code {
 	case CMD_SET_DB:
@@ -111,7 +114,7 @@ func handleCleanup(s *session, req *Req) {
 
 func handleSetDb(s *session, req *Req) {
 	db, _ := req.data.(string)
-	log.Printf("%s: Handling CMD_SET_DB for: %s\n", s.id, db)
+	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_SET_DB for: %s\n", s.id, db))
 	//clear all existing cursors
 	cleanupCursors(s)
 
@@ -131,25 +134,27 @@ func handleSetDb(s *session, req *Req) {
 		code: SUCCESS,
 	}
 
-	log.Printf("%s: Done CMD_SET_DB for: %s\n", s.id, db)
+	Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_SET_DB for: %s\n", s.id, db))
 }
 
 func handleExecute(s *session, req *Req) {
-	query, _ := req.data.(string)
-	log.Printf("%s: Handling CMD_EXECUTE for: %s\n", s.id, query)
+	defer TimeTrack(req.ctx, time.Now())
 
-	//create a cursor and return its id. Do not execute right away
+	query, _ := req.data.(string)
+	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_EXECUTE for: %s\n", s.id, query))
+
 	c := NewCursor()
+	c.start(req.ctx, s, query)
 	s.cursorStore.set(c.id, c)
+
+	Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_EXECUTE for: %s\n", s.id, query))
+
 	s.out <- &Res{
 		code: SUCCESS,
 		data: c.id,
 	}
 
-	//now start actual execution
-	c.start(s, query)
-
-	log.Printf("%s: Done CMD_EXECUTE for: %s\n", s.id, query)
+	Dbg(req.ctx, fmt.Sprintf("%s: Sent Response CMD_EXECUTE for: %s\n", s.id, query))
 }
 
 func handleFetch(s *session, req *Req) {
@@ -165,14 +170,15 @@ func handleFetch(s *session, req *Req) {
 		return
 	}
 
-	log.Printf("%s: Handling CMD_FETCH for: %s\n", s.id, c.id)
+	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_FETCH for: %s\n", s.id, c.id))
 
 	//send fetch request to cursor
 	c.in <- req
 	res := <-c.out
-	log.Printf("%s: Done CMD_FETCH for: %s with code: %s\n", s.id, c.id, res.code)
+
+	Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_FETCH for: %s with code: %s\n", s.id, c.id, res.code))
 	if res.code == ERROR || res.code == EOF {
-		log.Printf("%s: clearing cursor %s\n", s.id, c.id)
+		Dbg(req.ctx, fmt.Sprintf("%s: clearing cursor %s\n", s.id, c.id))
 		s.cursorStore.clear(c.id)
 	}
 	s.out <- res
@@ -182,7 +188,7 @@ func handleCancel(s *session, req *Req) {
 	cid := req.data.(string)
 	c, err := s.cursorStore.get(cid)
 
-	log.Printf("%s: Handling CMD_CANCEL for: %s\n", s.id, c.id)
+	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_CANCEL for: %s\n", s.id, c.id))
 
 	if err != nil {
 		s.out <- &Res{
@@ -198,5 +204,5 @@ func handleCancel(s *session, req *Req) {
 	s.out <- &Res{
 		code: SUCCESS,
 	}
-	log.Printf("%s: Done CMD_CANCEL for: %s\n", s.id, c.id)
+	Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_CANCEL for: %s\n", s.id, c.id))
 }

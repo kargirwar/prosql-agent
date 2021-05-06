@@ -2,6 +2,8 @@ package main
 
 import "time"
 
+const PORT = 23890
+
 const SESSION_CLEANUP_INTERVAL = 120 * time.Minute
 const CURSOR_CLEANUP_INTERVAL = 10 * time.Minute
 

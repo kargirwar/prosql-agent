@@ -1,16 +1,18 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"runtime"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/rs/zerolog/log"
 )
 
 var upgrader = websocket.Upgrader{
@@ -20,7 +22,7 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func TimeTrack(start time.Time) {
+func TimeTrack(ctx context.Context, start time.Time) {
 	elapsed := time.Since(start)
 
 	// Skip this function, and fetch the PC and file for its parent.
@@ -33,7 +35,16 @@ func TimeTrack(start time.Time) {
 	runtimeFunc := regexp.MustCompile(`^.*\.(.*)$`)
 	name := runtimeFunc.ReplaceAllString(funcObj.Name(), "$1")
 
-	log.Print(fmt.Sprintf("%s took %s", name, elapsed))
+	//log.Print(fmt.Sprintf("%s took %s", name, elapsed))
+	Dbg(ctx, fmt.Sprintf("%s took %s", name, elapsed))
+}
+
+func Dbg(ctx context.Context, v string) {
+	_, fl, line, _ := runtime.Caller(1)
+	log.Debug().
+		Str("req-id", reqId(ctx)).
+		Str("fl", fl+":"+strconv.Itoa(line)).
+		Str("m", v).Msg("")
 }
 
 func echo(w http.ResponseWriter, r *http.Request) {
@@ -46,13 +57,13 @@ func echo(w http.ResponseWriter, r *http.Request) {
 	for {
 		mt, message, err := c.ReadMessage()
 		if err != nil {
-			log.Println("read:", err)
+			//log.Println("read:", err)
 			break
 		}
 		log.Printf("recv: %s", message)
 		err = c.WriteMessage(mt, message)
 		if err != nil {
-			log.Println("write:", err)
+			//log.Println("write:", err)
 			break
 		}
 	}
@@ -61,24 +72,24 @@ func echo(w http.ResponseWriter, r *http.Request) {
 func sessionDumper(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		keys := sessionStore.getKeys()
-		log.Printf("Found :%d sessions\n", len(keys))
+		Dbg(r.Context(), fmt.Sprintf("Found :%d sessions", len(keys)))
 
 		for _, sk := range keys {
-			log.Printf("s: %s\n", sk)
+			Dbg(r.Context(), fmt.Sprintf("s: %s\n", sk))
 			s, _ := sessionStore.get(sk)
 			if s == nil {
-				log.Println("session " + sk + " is nil")
+				Dbg(r.Context(), fmt.Sprintf("session "+sk+" is nil"))
 				continue
 			}
 			ckeys := s.cursorStore.getKeys()
 			for _, ck := range ckeys {
 				c, _ := s.cursorStore.get(ck)
 				if c == nil {
-					log.Println("cursor " + ck + " is nil")
+					Dbg(r.Context(), fmt.Sprintf("cursor "+ck+" is nil"))
 					continue
 				}
 
-				log.Printf("    c: %s query: %s\n", ck, c.query)
+				Dbg(r.Context(), fmt.Sprintf("    c: %s query: %s\n", ck, c.query))
 			}
 		}
 		next.ServeHTTP(w, r)
@@ -89,6 +100,7 @@ func mw(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "https://dev.prosql.io")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Allow-Headers", "X-Request-ID")
 		w.Header().Set("Content-Type", "application/json")
 
 		if r.Method == http.MethodOptions {
@@ -98,7 +110,9 @@ func mw(next http.Handler) http.Handler {
 	})
 }
 
-func sendError(w http.ResponseWriter, err error, code string) {
+func sendError(ctx context.Context, w http.ResponseWriter, err error, code string) {
+	defer TimeTrack(ctx, time.Now())
+
 	res := &Response{
 		Status:    "error",
 		Msg:       err.Error(),
@@ -108,7 +122,9 @@ func sendError(w http.ResponseWriter, err error, code string) {
 	fmt.Fprintf(w, string(str))
 }
 
-func sendSuccess(w http.ResponseWriter, data interface{}, eof bool) {
+func sendSuccess(ctx context.Context, w http.ResponseWriter, data interface{}, eof bool) {
+	defer TimeTrack(ctx, time.Now())
+
 	res := &Response{
 		Status: "ok",
 		Data:   data,
@@ -117,8 +133,24 @@ func sendSuccess(w http.ResponseWriter, data interface{}, eof bool) {
 	str, err := json.Marshal(res)
 	if err != nil {
 		e := errors.New("Unrecoverable error")
-		sendError(w, e, ERR_UNRECOVERABLE)
+		sendError(ctx, w, e, ERR_UNRECOVERABLE)
 		return
 	}
 	fmt.Fprintf(w, string(str))
+}
+
+type requestIDKey struct{}
+
+//https://stackoverflow.com/a/67388007/1926351
+func requestIDSetter(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reqID := r.Header.Get("X-Request-ID")
+		ctx := context.WithValue(r.Context(), requestIDKey{}, reqID)
+
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func reqId(ctx context.Context) string {
+	return ctx.Value(requestIDKey{}).(string)
 }
