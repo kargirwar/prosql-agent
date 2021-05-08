@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/url"
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/dchest/uniuri"
 )
 
 const BASE_URL = "http://localhost:23890"
@@ -20,12 +23,23 @@ var creds = map[string]string{
 	"db":   "test-generico",
 }
 
+var ctx = context.Background()
+
 const N = 1000
 
 func TestSid(t *testing.T) {
 	sid := "VPtBxUGvRy9Eg3M3"
 	setdb_test(t, sid, "test-generico")
 	cid := execute_test(t, sid, "select * from `authorized-devices`")
+	fetch_test(t, sid, cid)
+}
+
+func TestClientExecute(t *testing.T) {
+	//login and get session id
+	sid := login_test(t)
+	//get db list
+
+	cid := execute_test(t, sid, "select * from users limit 1000")
 	fetch_test(t, sid, cid)
 }
 
@@ -64,7 +78,7 @@ func TestClientLogin(t *testing.T) {
 }
 
 func login_test(t *testing.T) string {
-	defer TimeTrackTest(time.Now())
+	defer TimeTrack(ctx, time.Now())
 
 	r := &Response{}
 
@@ -78,7 +92,7 @@ func login_test(t *testing.T) string {
 }
 
 func setdb_test(t *testing.T, sid, db string) {
-	defer TimeTrackTest(time.Now())
+	defer TimeTrack(ctx, time.Now())
 
 	r := &Response{}
 	params := map[string]string{
@@ -97,7 +111,7 @@ func setdb_test(t *testing.T, sid, db string) {
 }
 
 func execute_test(t *testing.T, sid, query string) string {
-	defer TimeTrackTest(time.Now())
+	defer TimeTrack(ctx, time.Now())
 
 	r := &Response{}
 	params := map[string]string{
@@ -118,7 +132,7 @@ func execute_test(t *testing.T, sid, query string) string {
 }
 
 func fetch_test(t *testing.T, sid, cid string) interface{} {
-	defer TimeTrackTest(time.Now())
+	defer TimeTrack(ctx, time.Now())
 
 	r := &Response{}
 	params := map[string]string{
@@ -168,11 +182,14 @@ func getQuery(t *testing.T, path string, m map[string]string) string {
 }
 
 func getJson(url string, target interface{}) error {
-	r, err := client.Get(url)
+	r, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return err
 	}
-	defer r.Body.Close()
 
-	return json.NewDecoder(r.Body).Decode(target)
+	r.Header.Add("X-Request-Id", uniuri.New())
+	res, err := client.Do(r)
+	defer res.Body.Close()
+
+	return json.NewDecoder(res.Body).Decode(target)
 }
