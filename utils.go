@@ -152,7 +152,7 @@ func sendSuccess(ctx context.Context, w http.ResponseWriter, data interface{}, e
 		sendError(ctx, w, e, ERR_UNRECOVERABLE)
 		return
 	}
-	fmt.Fprintf(w, string(str))
+	fmt.Fprint(w, string(str))
 }
 
 type requestIDKey struct{}

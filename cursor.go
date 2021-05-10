@@ -254,6 +254,10 @@ func fetchRows(c *cursor, fetchReq FetchReq) (*[][]string, error) {
 				v = string(b)
 			}
 
+			for index, val := range v {
+				fmt.Printf("%#U starts at byte position %d\n", val, index)
+			}
+
 			r = append(r, v)
 		}
 

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -32,6 +33,16 @@ func TestSid(t *testing.T) {
 	setdb_test(t, sid, "test-generico")
 	cid := execute_test(t, sid, "select * from `authorized-devices`")
 	fetch_test(t, sid, cid)
+}
+
+func TestCorrupted(t *testing.T) {
+	//login and get session id
+	sid := login_test(t)
+	//get db list
+
+	cid := execute_test(t, sid, "select description from `vouchers` where id = 606")
+	rows := fetch_test(t, sid, cid)
+	log.Println(rows)
 }
 
 func TestClientExecute(t *testing.T) {
@@ -190,6 +201,10 @@ func getJson(url string, target interface{}) error {
 	r.Header.Add("X-Request-Id", uniuri.New())
 	res, err := client.Do(r)
 	defer res.Body.Close()
+
+	//body, err := ioutil.ReadAll(res.Body)
+	//bodyString := string(body)
+	//fmt.Println(bodyString)
 
 	return json.NewDecoder(res.Body).Decode(target)
 }
