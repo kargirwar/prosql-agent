@@ -4,6 +4,13 @@ import "time"
 
 const PORT = 23890
 
+//pool
+const MAX_OPEN_CONNS = 500
+const MAX_IDLE_CONNS = 100
+const MAX_IDLE_CONNS_AT_START = 10
+
+const BATCH_SIZE = 5000
+
 const SESSION_CLEANUP_INTERVAL = 10 * time.Minute
 const CURSOR_CLEANUP_INTERVAL = 10 * time.Minute
 
@@ -20,6 +27,7 @@ const EOF = "eof"
 //commands
 const CMD_EXECUTE = "execute"
 const CMD_FETCH = "fetch"
+const CMD_FETCH_WS = "fetch-ws"
 const CMD_CANCEL = "cancel"
 const CMD_CLEANUP = "cleanup"
 const CMD_SET_DB = "set-db"

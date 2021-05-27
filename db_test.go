@@ -60,12 +60,25 @@ func TestFetch(t *testing.T) {
 		t.Errorf("%s\n", err.Error())
 	}
 
+	ch := make(chan []string)
+
+	go func() {
+		for {
+			r := <-ch
+			if r[0] == "done" {
+				break
+			}
+		}
+	}()
+
 	for j := 0; j < 1; j++ {
 		start := time.Now()
-		fetchRows(t, ctx, pool, "select * from `bills-1` limit 500")
+		fetchRows(t, ctx, pool, "select * from `bills-1` limit 500", ch)
 		end := time.Now()
 		t.Logf("%d took %s\n", j, end.Sub(start))
 	}
+
+	ch <- []string{"done"}
 
 	//var q string
 	//for j := 1; j < len(billsFields); j++ {
@@ -92,7 +105,7 @@ func TestFetch(t *testing.T) {
 
 }
 
-func fetchRows(t *testing.T, ctx context.Context, pool *sql.DB, q string) {
+func fetchRows(t *testing.T, ctx context.Context, pool *sql.DB, q string, ch chan []string) {
 	s := time.Now()
 	rows, err := pool.QueryContext(ctx, q)
 	if err != nil {
@@ -133,6 +146,23 @@ func fetchRows(t *testing.T, ctx context.Context, pool *sql.DB, q string) {
 		}
 		e = time.Now()
 		sTime += e.Sub(s)
+
+		var r []string
+		for i, c := range cols {
+			r = append(r, c)
+			var v string
+
+			if vals[i] == nil {
+				v = "NULL"
+			} else {
+				b, _ := vals[i].([]byte)
+				v = string(b)
+			}
+
+			r = append(r, v)
+		}
+
+		ch <- r
 	}
 
 	e = time.Now()

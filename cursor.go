@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"time"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/dchest/uniuri"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/gorilla/websocket"
 )
 
 //==============================================================//
@@ -182,10 +184,13 @@ func handleCursorRequest(c *cursor, req *Req) *Res {
 	defer TimeTrack(req.ctx, time.Now())
 
 	switch req.code {
+	case CMD_FETCH_WS:
+		fallthrough
+
 	case CMD_FETCH:
 		Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_FETCH\n", c.id))
 		fetchReq, _ := req.data.(FetchReq)
-		rows, err := fetchRows(c, fetchReq)
+		rows, err := fetchRows(req.ctx, c, fetchReq)
 		if err != nil {
 			Dbg(req.ctx, fmt.Sprintf("%s: %s\n", c.id, err.Error()))
 			return &Res{
@@ -217,10 +222,16 @@ func handleCursorRequest(c *cursor, req *Req) *Res {
 	}
 }
 
-func fetchRows(c *cursor, fetchReq FetchReq) (*[][]string, error) {
+type res struct {
+	K []string `json:"k"`
+}
+
+func fetchRows(ctx context.Context, c *cursor, fetchReq FetchReq) (*[][]string, error) {
 	if fetchReq.cid != c.id {
 		return nil, errors.New(ERR_INVALID_CURSOR_ID)
 	}
+
+	ws := fetchReq.ws
 
 	cols, err := c.rows.Columns()
 	if err != nil {
@@ -257,6 +268,14 @@ func fetchRows(c *cursor, fetchReq FetchReq) (*[][]string, error) {
 			r = append(r, v)
 		}
 
+		if ws != nil {
+			str, _ := json.Marshal(&res{K: r})
+			err = ws.WriteMessage(websocket.TextMessage, []byte(str))
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		results = append(results, r)
 
 		n++
@@ -267,6 +286,14 @@ func fetchRows(c *cursor, fetchReq FetchReq) (*[][]string, error) {
 
 	if c.rows.Err() != nil {
 		return nil, c.rows.Err()
+	}
+
+	if ws != nil {
+		str, _ := json.Marshal(&res{K: []string{"eos"}})
+		err = ws.WriteMessage(websocket.TextMessage, []byte(str))
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &results, nil

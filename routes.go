@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -122,6 +123,34 @@ func setDb(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sendSuccess(r.Context(), w, nil, false)
+}
+
+//execute query and send results over ws
+func execute_ws(w http.ResponseWriter, r *http.Request) {
+	ctx := getContext(r)
+	defer TimeTrack(ctx, time.Now())
+	ws, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println(err)
+		Dbg(ctx, fmt.Sprintf("%s", err.Error()))
+		return
+	}
+	defer ws.Close()
+
+	sid, query, err := getExecuteParams(r)
+
+	if err != nil {
+		sendError_ws(ctx, ws, err, ERR_INVALID_USER_INPUT)
+		return
+	}
+
+	cid, err := Execute(ctx, sid, query)
+	err = Fetch_ws(ctx, sid, cid, ws, BATCH_SIZE)
+
+	if err != nil {
+		sendError_ws(ctx, ws, err, ERR_INVALID_USER_INPUT)
+		return
+	}
 }
 
 func execute(w http.ResponseWriter, r *http.Request) {

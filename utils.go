@@ -126,6 +126,18 @@ func mw(next http.Handler) http.Handler {
 	})
 }
 
+func sendError_ws(ctx context.Context, c *websocket.Conn, err error, code string) {
+	defer TimeTrack(ctx, time.Now())
+
+	res := &Response{
+		Status:    "error",
+		Msg:       err.Error(),
+		ErrorCode: code,
+	}
+	str, _ := json.Marshal(res)
+	c.WriteMessage(websocket.TextMessage, str)
+}
+
 func sendError(ctx context.Context, w http.ResponseWriter, err error, code string) {
 	defer TimeTrack(ctx, time.Now())
 
@@ -174,4 +186,15 @@ func reqId(ctx context.Context) string {
 	}
 
 	return "req-id"
+}
+
+func getContext(r *http.Request) context.Context {
+	params := r.URL.Query()
+
+	reqId, present := params["req-id"]
+	if present && len(reqId) != 0 {
+		return context.WithValue(r.Context(), requestIDKey{}, reqId[0])
+	}
+
+	return r.Context()
 }

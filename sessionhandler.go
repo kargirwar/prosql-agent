@@ -75,6 +75,9 @@ func handleSessionRequest(s *session, req *Req) {
 	case CMD_FETCH:
 		handleFetch(s, req)
 
+	case CMD_FETCH_WS:
+		handleFetch_ws(s, req)
+
 	case CMD_CANCEL:
 		handleCancel(s, req)
 
@@ -155,6 +158,33 @@ func handleExecute(s *session, req *Req) {
 	}
 
 	Dbg(req.ctx, fmt.Sprintf("%s: Sent Response CMD_EXECUTE for: %s\n", s.id, query))
+}
+
+func handleFetch_ws(s *session, req *Req) {
+	//just pass on to appropriate cursor
+	fetchReq, _ := req.data.(FetchReq)
+	c, err := s.cursorStore.get(fetchReq.cid)
+
+	if err != nil {
+		req.resChan <- &Res{
+			code: ERROR,
+			data: err,
+		}
+		return
+	}
+
+	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_FETCH_WS for: %s\n", s.id, c.id))
+
+	//send fetch request to cursor
+	c.in <- req
+	res := <-c.out
+
+	//Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_FETCH for: %s with code: %s\n", s.id, c.id, res.code))
+	if res.code == ERROR || res.code == EOF {
+		Dbg(req.ctx, fmt.Sprintf("%s: clearing cursor %s\n", s.id, c.id))
+		s.cursorStore.clear(c.id)
+	}
+	req.resChan <- res
 }
 
 func handleFetch(s *session, req *Req) {

@@ -18,6 +18,7 @@ import (
 
 	"github.com/dchest/uniuri"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/gorilla/websocket"
 )
 
 //==============================================================//
@@ -45,6 +46,16 @@ func (ps *session) getAccessTime() time.Time {
 	defer ps.mutex.Unlock()
 
 	return ps.accessTime
+}
+
+func (ps *session) String() string {
+	ps.mutex.Lock()
+	defer ps.mutex.Unlock()
+
+	stats := ps.pool.Stats()
+	return fmt.Sprintf("max %d open %d inuse %d idle %d wc %d wd %s maxclosed %d",
+		stats.MaxOpenConnections, stats.OpenConnections, stats.InUse, stats.Idle,
+		stats.WaitCount, stats.WaitDuration, stats.MaxIdleClosed)
 }
 
 type sessions struct {
@@ -116,6 +127,7 @@ type Res struct {
 type FetchReq struct {
 	cid string
 	n   int
+	ws  *websocket.Conn
 }
 
 //==============================================================//
@@ -222,7 +234,7 @@ func Execute(ctx context.Context, sid string, query string) (string, error) {
 		return "", err
 	}
 
-	Dbg(ctx, fmt.Sprintf("session id: %s", s.id))
+	Dbg(ctx, fmt.Sprintf("%s", s))
 
 	//we ask the session handler to create a new cursor and return its id
 	ch := make(chan *Res)
@@ -242,6 +254,38 @@ func Execute(ctx context.Context, sid string, query string) (string, error) {
 
 	Dbg(ctx, fmt.Sprintf("%s Received Response for %s", s.id, query))
 	return res.data.(string), nil
+}
+
+//fetch n rows from session sid using cursor cid. The cursor will directly
+//send data on websocket channel ws
+func Fetch_ws(ctx context.Context, sid string, cid string, ws *websocket.Conn, n int) error {
+	defer TimeTrack(ctx, time.Now())
+
+	s, err := sessionStore.get(sid)
+	if err != nil {
+		return err
+	}
+
+	ch := make(chan *Res)
+	s.in <- &Req{
+		ctx:  ctx,
+		code: CMD_FETCH_WS,
+		data: FetchReq{
+			cid: cid,
+			n:   n,
+			ws:  ws,
+		},
+		resChan: ch,
+	}
+
+	res := <-ch
+	log.Printf("FETCH s: %s c: %s code %s\n", s.id, cid, res.code)
+
+	if res.code == ERROR {
+		return res.data.(error)
+	}
+
+	return nil
 }
 
 //fetch n rows from session sid using cursor cid
@@ -311,6 +355,9 @@ func createSession(ctx context.Context, dbtype string, dsn string) (*session, er
 		return nil, err
 	}
 
+	pool.SetMaxOpenConns(MAX_OPEN_CONNS)
+	pool.SetMaxIdleConns(MAX_IDLE_CONNS)
+
 	ctx1, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 
@@ -318,6 +365,16 @@ func createSession(ctx context.Context, dbtype string, dsn string) (*session, er
 		return nil, err
 	}
 
+	//hack. Have n idle connections ready
+	//for i := 0; i < MAX_IDLE_CONNS_AT_START; i++ {
+	//rows, err := pool.QueryContext(ctx1, "select 1")
+	//if err != nil {
+	//return nil, err
+	//}
+	//
+	//rows.Close()
+	//}
+	//
 	var s session
 	s.pool = pool
 	s.accessTime = time.Now()
