@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"time"
 
 	"context"
@@ -174,7 +173,7 @@ loop:
 			}
 
 		case <-c.ctx.Done():
-			log.Printf("%s: Shutting down cursorHandler due to ctx.Done", c.id)
+			Dbg(reqCtx, fmt.Sprintf("%s: Shutting down cursorHandler due to ctx.Done", c.id))
 			break loop
 		}
 	}

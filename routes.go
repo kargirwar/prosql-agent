@@ -107,24 +107,6 @@ func login(w http.ResponseWriter, r *http.Request) {
 	}{sid}, false)
 }
 
-func setDb(w http.ResponseWriter, r *http.Request) {
-	sid, db, err := getSetDbParams(r)
-
-	if err != nil {
-		sendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
-		return
-	}
-
-	err = SetDb(sid, db)
-
-	if err != nil {
-		sendError(r.Context(), w, err, ERR_DB_ERROR)
-		return
-	}
-
-	sendSuccess(r.Context(), w, nil, false)
-}
-
 //execute query and send results over ws
 func execute_ws(w http.ResponseWriter, r *http.Request) {
 	ctx := getContext(r)
@@ -222,24 +204,6 @@ func getFetchParams(r *http.Request) (string, string, int, error) {
 		return "", "", -1, e
 	}
 	return sid[0], cid[0], n, nil
-}
-
-func getSetDbParams(r *http.Request) (string, string, error) {
-	params := r.URL.Query()
-
-	sid, present := params["session-id"]
-	if !present || len(sid) == 0 {
-		e := errors.New("Session ID not provided")
-		return "", "", e
-	}
-
-	db, present := params["db"]
-	if !present || len(db) == 0 {
-		e := errors.New("Db not provided")
-		return "", "", e
-	}
-
-	return sid[0], db[0], nil
 }
 
 func getExecuteParams(r *http.Request) (string, string, error) {

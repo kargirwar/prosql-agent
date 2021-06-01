@@ -11,8 +11,8 @@ const MAX_IDLE_CONNS_AT_START = 10
 
 const BATCH_SIZE = 5000
 
-const SESSION_CLEANUP_INTERVAL = 10 * time.Minute
-const CURSOR_CLEANUP_INTERVAL = 10 * time.Minute
+const SESSION_CLEANUP_INTERVAL = 20 * time.Minute
+const CURSOR_CLEANUP_INTERVAL = 1 * time.Minute
 
 //error codes
 const ERR_INVALID_USER_INPUT = "invalid-user-input"

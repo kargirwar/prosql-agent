@@ -3,15 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 )
 
 //goroutine to deal with one session
-func sessionHandler(s *session) {
-	log.Printf("Starting session handler for %s\n", s.id)
+func sessionHandler(ctx context.Context, s *session) {
+	Dbg(ctx, fmt.Sprintf("Starting session handler for %s\n", s.id))
 	defer s.pool.Close()
 
 	ticker := time.NewTicker(CURSOR_CLEANUP_INTERVAL)
@@ -20,48 +19,48 @@ loop:
 	for {
 		select {
 		case req := <-s.in:
-			go handleSessionRequest(s, req)
-
 			if req.code == CMD_CLEANUP {
-				log.Printf("Shutting down session handler for %s\n", s.id)
+				Dbg(ctx, fmt.Sprintf("Shutting down session handler for %s\n", s.id))
+				handleCleanup(ctx, s, req)
 				break loop
 			}
+			go handleSessionRequest(ctx, s, req)
 
 		case <-ticker.C:
-			cleanupCursors(s)
+			cleanupCursors(ctx, s)
 		}
 	}
 }
 
 //cleanup cursors which have not been accessed for CURSOR_CLEANUP_INTERVAL
-func cleanupCursors(s *session) {
-	log.Printf("%s: Starting cleanup\n", s.id)
+func cleanupCursors(ctx context.Context, s *session) {
+	Dbg(ctx, fmt.Sprintf("%s: Starting cleanup", s.id))
 	keys := s.cursorStore.getKeys()
 	for _, k := range keys {
-		log.Printf("%s: Checking cursor: %s\n", s.id, k)
+		Dbg(ctx, fmt.Sprintf("%s: Checking cursor: %s\n", s.id, k))
 		c, err := s.cursorStore.get(k)
 		if err != nil {
-			log.Printf("%s: Skipping cursor: %s\n", s.id, k)
+			Dbg(ctx, fmt.Sprintf("%s: Skipping cursor: %s\n", s.id, k))
 			continue
 		}
 
 		now := time.Now()
 		if now.Sub(c.getAccessTime()) > CURSOR_CLEANUP_INTERVAL {
-			log.Printf("%s: Cleaning up cursor: %s\n", s.id, k)
+			Dbg(ctx, fmt.Sprintf("%s: Cleaning up cursor: %s\n", s.id, k))
 			//This will handle both cases: either the cursor is in the middle of a query
 			//or waiting for a command from session handler
 			c.cancel()
 
-			log.Printf("%s: Cleanup done for cursor: %s\n", s.id, k)
+			Dbg(ctx, fmt.Sprintf("%s: Cleanup done for cursor: %s\n", s.id, k))
 			s.cursorStore.clear(k)
-			log.Printf("%s: Clear done for cursor: %s\n", s.id, k)
+			Dbg(ctx, fmt.Sprintf("%s: Clear done for cursor: %s\n", s.id, k))
 		}
 	}
 
-	log.Printf("%s: Done cleanup\n", s.id)
+	Dbg(ctx, fmt.Sprintf("%s: Done cleanup", s.id))
 }
 
-func handleSessionRequest(s *session, req *Req) {
+func handleSessionRequest(ctx context.Context, s *session, req *Req) {
 	defer TimeTrack(req.ctx, time.Now())
 
 	s.setAccessTime()
@@ -80,46 +79,43 @@ func handleSessionRequest(s *session, req *Req) {
 
 	case CMD_CANCEL:
 		handleCancel(s, req)
-
-	case CMD_CLEANUP:
-		handleCleanup(s, req)
 	}
 }
 
 //cleanup cursors *unconditionally*
-func handleCleanup(s *session, req *Req) {
-	log.Printf("%s: Handling CMD_CLEANUP\n", s.id)
+func handleCleanup(ctx context.Context, s *session, req *Req) {
+	Dbg(ctx, fmt.Sprintf("%s: Handling CMD_CLEANUP\n", s.id))
 
 	keys := s.cursorStore.getKeys()
 	for _, k := range keys {
 		c, err := s.cursorStore.get(k)
-		log.Printf("%s: Cleaning up cursor: %s\n", s.id, k)
+		Dbg(ctx, fmt.Sprintf("%s: Cleaning up cursor: %s\n", s.id, k))
 		//This will handle both cases: either the cursor is in the middle of a query
 		//or waiting for a command from session handler
 		if err != nil {
 			s.cursorStore.clear(k)
-			log.Printf("%s cleaned up invalid cursor: %s\n", s.id, k)
+			Dbg(ctx, fmt.Sprintf("%s cleaned up invalid cursor: %s\n", s.id, k))
 			continue
 		}
 		c.cancel()
 
-		log.Printf("%s: Cleanup done for cursor: %s\n", s.id, k)
+		Dbg(ctx, fmt.Sprintf("%s: Cleanup done for cursor: %s\n", s.id, k))
 		s.cursorStore.clear(k)
-		log.Printf("%s: Clear done for cursor: %s\n", s.id, k)
+		Dbg(ctx, fmt.Sprintf("%s: Clear done for cursor: %s\n", s.id, k))
 	}
 
 	req.resChan <- &Res{
 		code: CLEANUP_DONE,
 	}
 
-	log.Printf("%s: Done CMD_CLEANUP\n", s.id)
+	Dbg(ctx, fmt.Sprintf("%s: Done CMD_CLEANUP\n", s.id))
 }
 
 func handleSetDb(s *session, req *Req) {
 	db, _ := req.data.(string)
 	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_SET_DB for: %s\n", s.id, db))
 	//clear all existing cursors
-	cleanupCursors(s)
+	cleanupCursors(req.ctx, s)
 
 	rows, err := s.pool.QueryContext(context.Background(), "use `"+db+"`")
 	if err != nil {

@@ -12,13 +12,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
 	"github.com/dchest/uniuri"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/websocket"
+	log "github.com/sirupsen/logrus"
 )
 
 //==============================================================//
@@ -28,7 +28,6 @@ type session struct {
 	id          string
 	pool        *sql.DB
 	in          chan *Req
-	out         chan *Res
 	accessTime  time.Time
 	cursorStore *cursors
 	mutex       sync.Mutex
@@ -151,37 +150,56 @@ func cleanupSessions() {
 	for {
 		select {
 		case <-ticker.C:
-			log.Printf("Starting session cleanup")
+			log.Debug("Starting session cleanup")
 			keys := sessionStore.getKeys()
 			for _, k := range keys {
-				log.Printf("%s: Checking session\n", k)
+				log.WithFields(log.Fields{
+					"session-id": k,
+				}).Debug("Checking session")
+
 				s, err := sessionStore.get(k)
 				if err != nil {
-					log.Printf("%s: Skipping session\n", k)
+					log.WithFields(log.Fields{
+						"session-id": k,
+					}).Debug("Skipping session")
 					continue
 				}
 
 				now := time.Now()
 				if now.Sub(s.getAccessTime()) > SESSION_CLEANUP_INTERVAL {
-					log.Printf("%s: Cleaning up session\n", k)
+
+					log.WithFields(log.Fields{
+						"session-id": k,
+					}).Debug("Cleaning up session")
+
+					ch := make(chan *Res)
 					s.in <- &Req{
-						code: CMD_CLEANUP,
+						code:    CMD_CLEANUP,
+						resChan: ch,
 					}
 
-					res := <-s.out
+					res := <-ch
 					if res.code == ERROR {
 						//TODO: What are we going to do here?
-						log.Printf("%s: Unable to cleanup\n", k)
+						log.WithFields(log.Fields{
+							"session-id": k,
+						}).Debug("Unable to cleanup")
+
 						continue
 					}
 
-					log.Printf("%s: Cleanup done\n", k)
+					log.WithFields(log.Fields{
+						"session-id": k,
+					}).Debug("Cleanup done")
+
 					sessionStore.clear(k)
-					log.Printf("%s: Clear done\n", k)
+					log.WithFields(log.Fields{
+						"session-id": k,
+					}).Debug("Clear done")
 				}
 			}
 
-			log.Printf("Done session cleanup")
+			log.Debug("Done session cleanup")
 		}
 	}
 }
@@ -200,28 +218,8 @@ func NewSession(ctx context.Context, dbtype string, dsn string) (string, error) 
 
 	sessionStore.set(s.id, s)
 
-	go sessionHandler(s)
+	go sessionHandler(ctx, s)
 	return s.id, nil
-}
-
-func SetDb(sid string, db string) error {
-
-	s, err := sessionStore.get(sid)
-	if err != nil {
-		return err
-	}
-
-	s.in <- &Req{
-		code: CMD_SET_DB,
-		data: db,
-	}
-
-	res := <-s.out
-	if res.code == ERROR {
-		return res.data.(error)
-	}
-
-	return nil
 }
 
 //execute a query and create a cursor for the results
@@ -309,7 +307,7 @@ func Fetch(ctx context.Context, sid string, cid string, n int) (*[][]string, boo
 	}
 
 	res := <-ch
-	log.Printf("FETCH s: %s c: %s code %s\n", s.id, cid, res.code)
+	Dbg(ctx, fmt.Sprintf("FETCH s: %s c: %s code %s\n", s.id, cid, res.code))
 
 	if res.code == ERROR {
 		return nil, false, res.data.(error)
@@ -379,7 +377,6 @@ func createSession(ctx context.Context, dbtype string, dsn string) (*session, er
 	s.pool = pool
 	s.accessTime = time.Now()
 	s.in = make(chan *Req, 100)
-	s.out = make(chan *Res)
 	s.id = uniuri.New()
 	s.cursorStore = NewCursorStore()
 
