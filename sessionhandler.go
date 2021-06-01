@@ -146,7 +146,7 @@ func handleExecute(s *session, req *Req) {
 	query, _ := req.data.(string)
 	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_EXECUTE for: %s\n", s.id, query))
 
-	c := NewCursor()
+	c := NewCursor(req.ctx)
 	c.start(req.ctx, s, query)
 	s.cursorStore.set(c.id, c)
 

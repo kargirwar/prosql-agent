@@ -1,32 +1,40 @@
 package main
 
 import (
-	"flag"
 	_ "fmt"
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	_ "net/http/pprof"
 
 	"github.com/gorilla/mux"
 	_ "github.com/gorilla/websocket"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
+	log "github.com/sirupsen/logrus"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
+var logger *lumberjack.Logger
+
+func init() {
+	log.SetFormatter(&log.JSONFormatter{
+		TimestampFormat: time.StampMilli,
+	})
+
+	logger = &lumberjack.Logger{
+		Filename:   "prosql.log",
+		MaxSize:    10, // megabytes
+		MaxBackups: 2,
+		MaxAge:     28,   //days
+		Compress:   true, // disabled by default
+	}
+	log.SetOutput(logger)
+
+	log.SetLevel(log.DebugLevel)
+}
+
 func main() {
-
-	//logging setup
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnixMs
-	//debug := flag.Bool("debug", false, "sets log level to debug")
-
-	flag.Parse()
-
-	//zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	//if *debug {
-	zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	//}
 
 	r := mux.NewRouter()
 
@@ -45,9 +53,10 @@ func main() {
 
 	http.Handle("/", r)
 
-	log.Info().Msg("prosql-agent Listening at:" + strconv.Itoa(PORT))
+	log.Info("prosql-agent Listening at:" + strconv.Itoa(PORT))
+
 	if err := http.ListenAndServe(":"+strconv.Itoa(PORT), nil); err != nil {
-		log.Fatal().Msg(err.Error())
+		log.Fatal(err.Error())
 		os.Exit(-1)
 	}
 }

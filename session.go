@@ -279,7 +279,7 @@ func Fetch_ws(ctx context.Context, sid string, cid string, ws *websocket.Conn, n
 	}
 
 	res := <-ch
-	log.Printf("FETCH s: %s c: %s code %s\n", s.id, cid, res.code)
+	Dbg(ctx, fmt.Sprintf("FETCH s: %s c: %s code %s\n", s.id, cid, res.code))
 
 	if res.code == ERROR {
 		return res.data.(error)

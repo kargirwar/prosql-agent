@@ -135,13 +135,13 @@ func NewCursorStore() *cursors {
 //          cursor structs and methods end
 //==============================================================//
 
-func NewCursor() *cursor {
-	c := createCursor()
-	go cursorHandler(c)
+func NewCursor(reqCtx context.Context) *cursor {
+	c := createCursor(reqCtx)
+	go cursorHandler(reqCtx, c)
 	return c
 }
 
-func createCursor() *cursor {
+func createCursor(reqCtx context.Context) *cursor {
 	var c cursor
 	ctx, cancel := context.WithCancel(context.Background())
 	c.id = uniuri.New()
@@ -157,8 +157,8 @@ func createCursor() *cursor {
 //func
 
 //goroutine to handle a single cursor
-func cursorHandler(c *cursor) {
-	log.Printf("Starting cursorHandler for %s\n", c.id)
+func cursorHandler(reqCtx context.Context, c *cursor) {
+	Dbg(reqCtx, fmt.Sprintf("Starting cursorHandler for %s\n", c.id))
 
 loop:
 	for {

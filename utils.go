@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/rs/zerolog/log"
+	log "github.com/sirupsen/logrus"
 )
 
 var upgrader = websocket.Upgrader{
@@ -57,10 +57,10 @@ func TimeTrack(ctx context.Context, start time.Time) {
 
 func Dbg(ctx context.Context, v string) {
 	_, fl, line, _ := runtime.Caller(1)
-	log.Debug().
-		Str("req-id", reqId(ctx)).
-		Str("fl", fl+":"+strconv.Itoa(line)).
-		Str("m", v).Msg("")
+	log.WithFields(log.Fields{
+		"req-id": reqId(ctx),
+		"fl":     fl + ":" + strconv.Itoa(line),
+	}).Debug(v)
 }
 
 func echo(w http.ResponseWriter, r *http.Request) {
