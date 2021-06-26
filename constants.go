@@ -25,6 +25,7 @@ const ERR_INVALID_CURSOR_CMD = "invalid-cursor-cmd"
 const EOF = "eof"
 
 //commands
+const CMD_QUERY = "query"
 const CMD_EXECUTE = "execute"
 const CMD_FETCH = "fetch"
 const CMD_FETCH_WS = "fetch-ws"

@@ -68,6 +68,9 @@ func handleSessionRequest(ctx context.Context, s *session, req *Req) {
 	case CMD_SET_DB:
 		handleSetDb(s, req)
 
+	case CMD_QUERY:
+		handleQuery(s, req)
+
 	case CMD_EXECUTE:
 		handleExecute(s, req)
 
@@ -136,21 +139,48 @@ func handleSetDb(s *session, req *Req) {
 	Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_SET_DB for: %s\n", s.id, db))
 }
 
+func handleQuery(s *session, req *Req) {
+	defer TimeTrack(req.ctx, time.Now())
+
+	query, _ := req.data.(string)
+	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_QUERY for: %s\n", s.id, query))
+
+	c := NewQueryCursor(req.ctx)
+	c.start(req.ctx, s, query)
+	s.cursorStore.set(c.id, c)
+
+	Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_QUERY for: %s\n", s.id, query))
+
+	req.resChan <- &Res{
+		code: SUCCESS,
+		data: c.id,
+	}
+
+	Dbg(req.ctx, fmt.Sprintf("%s: Sent Response CMD_QUERY for: %s\n", s.id, query))
+}
+
 func handleExecute(s *session, req *Req) {
 	defer TimeTrack(req.ctx, time.Now())
 
 	query, _ := req.data.(string)
 	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_EXECUTE for: %s\n", s.id, query))
 
-	c := NewCursor(req.ctx)
-	c.start(req.ctx, s, query)
-	s.cursorStore.set(c.id, c)
+	c := NewExecuteCursor(req.ctx)
+	n, err := c.execute(req.ctx, s, query)
+
+	if err != nil {
+		req.resChan <- &Res{
+			code: ERROR,
+			data: err,
+		}
+		return
+	}
 
 	Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_EXECUTE for: %s\n", s.id, query))
 
 	req.resChan <- &Res{
 		code: SUCCESS,
-		data: c.id,
+		data: n,
 	}
 
 	Dbg(req.ctx, fmt.Sprintf("%s: Sent Response CMD_EXECUTE for: %s\n", s.id, query))

@@ -135,6 +135,7 @@ func query_ws(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+//execute query and return its cursor id for later use
 func query(w http.ResponseWriter, r *http.Request) {
 	defer TimeTrack(r.Context(), time.Now())
 
@@ -155,6 +156,29 @@ func query(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(r.Context(), w, struct {
 		CursorId string `json:"cursor-id"`
 	}{cid}, false)
+}
+
+//execute query and return results
+func execute(w http.ResponseWriter, r *http.Request) {
+	defer TimeTrack(r.Context(), time.Now())
+
+	sid, query, err := getQueryParams(r)
+
+	if err != nil {
+		sendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
+		return
+	}
+
+	n, err := Execute(r.Context(), sid, query)
+
+	if err != nil {
+		sendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
+		return
+	}
+
+	sendSuccess(r.Context(), w, struct {
+		RowsAffected int64 `json:"rows-affected"`
+	}{n}, false)
 }
 
 func fetch(w http.ResponseWriter, r *http.Request) {
@@ -207,6 +231,29 @@ func getFetchParams(r *http.Request) (string, string, int, error) {
 }
 
 func getQueryParams(r *http.Request) (string, string, error) {
+	params := r.URL.Query()
+
+	sid, present := params["session-id"]
+	if !present || len(sid) == 0 {
+		e := errors.New("Session ID not provided")
+		return "", "", e
+	}
+
+	query, present := params["query"]
+	if !present || len(query) == 0 {
+		e := errors.New("Query not provided")
+		return "", "", e
+	}
+
+	q, err := url.QueryUnescape(query[0])
+	if err != nil {
+		return "", "", err
+	}
+
+	return sid[0], q, nil
+}
+
+func getExecuteParams(r *http.Request) (string, string, error) {
 	params := r.URL.Query()
 
 	sid, present := params["session-id"]

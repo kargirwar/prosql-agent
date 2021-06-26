@@ -53,6 +53,31 @@ func (pc *cursor) start(ctx context.Context, s *session, query string) error {
 	return nil
 }
 
+func (pc *cursor) execute(ctx context.Context, s *session, query string) (int64, error) {
+	defer TimeTrack(ctx, time.Now())
+
+	pc.mutex.Lock()
+	defer pc.mutex.Unlock()
+
+	Dbg(ctx, "Starting query: "+query)
+
+	result, err := s.pool.ExecContext(pc.ctx, query)
+	if err != nil {
+		pc.err = err
+		return -1, err
+	}
+
+	Dbg(ctx, "Done query: "+query)
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		pc.err = err
+		return -1, err
+	}
+
+	return rows, nil
+}
+
 func (pc *cursor) setAccessTime() {
 	pc.mutex.Lock()
 	defer pc.mutex.Unlock()
@@ -134,9 +159,14 @@ func NewCursorStore() *cursors {
 //          cursor structs and methods end
 //==============================================================//
 
-func NewCursor(reqCtx context.Context) *cursor {
+func NewQueryCursor(reqCtx context.Context) *cursor {
 	c := createCursor(reqCtx)
 	go cursorHandler(reqCtx, c)
+	return c
+}
+
+func NewExecuteCursor(reqCtx context.Context) *cursor {
+	c := createCursor(reqCtx)
 	return c
 }
 

@@ -238,12 +238,12 @@ func Query(ctx context.Context, sid string, query string) (string, error) {
 	ch := make(chan *Res)
 	s.in <- &Req{
 		ctx:     ctx,
-		code:    CMD_EXECUTE,
+		code:    CMD_QUERY,
 		data:    query,
 		resChan: ch,
 	}
 
-	Dbg(ctx, fmt.Sprintf("%s Send CMD_EXECUTE for %s", s.id, query))
+	Dbg(ctx, fmt.Sprintf("%s Send CMD_QUERY for %s", s.id, query))
 
 	res := <-ch
 	if res.code == ERROR {
@@ -319,6 +319,36 @@ func Fetch(ctx context.Context, sid string, cid string, n int) (*[][]string, boo
 	}
 
 	return res.data.(*[][]string), eof, nil
+}
+
+func Execute(ctx context.Context, sid string, query string) (int64, error) {
+	defer TimeTrack(ctx, time.Now())
+
+	s, err := sessionStore.get(sid)
+	if err != nil {
+		return -1, err
+	}
+
+	Dbg(ctx, fmt.Sprintf("%s", s))
+
+	//we ask the session handler to create a new cursor and return its id
+	ch := make(chan *Res)
+	s.in <- &Req{
+		ctx:     ctx,
+		code:    CMD_EXECUTE,
+		data:    query,
+		resChan: ch,
+	}
+
+	Dbg(ctx, fmt.Sprintf("%s Send CMD_EXECUTE for %s", s.id, query))
+
+	res := <-ch
+	if res.code == ERROR {
+		return -1, res.data.(error)
+	}
+
+	Dbg(ctx, fmt.Sprintf("%s Received Response for %s", s.id, query))
+	return res.data.(int64), nil
 }
 
 //cancel a running query

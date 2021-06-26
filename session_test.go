@@ -31,10 +31,12 @@ func TestExecute(t *testing.T) {
 	t.Log(sid)
 
 	//_, err = Execute(sid, "select * from users")
-	_, err = Execute(ctx, sid, "select sleep (10)")
+	//_, err = Execute(ctx, sid, "select sleep (10)")
+	n, err := Execute(ctx, sid, "update users set name = 'PK' where id = 1")
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}
+	t.Logf("%d rows affected", n)
 }
 
 func TestFetch(t *testing.T) {
@@ -46,7 +48,7 @@ func TestFetch(t *testing.T) {
 
 	t.Log(sid)
 
-	cid, err := Execute(ctx, sid, "select * from users limit 999")
+	cid, err := Query(ctx, sid, "select * from users limit 999")
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}
@@ -74,7 +76,7 @@ func TestCancel(t *testing.T) {
 
 	t.Log(sid)
 
-	cid, err := Execute(ctx, sid, "select sleep(10)")
+	cid, err := Query(ctx, sid, "select sleep(10)")
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}
@@ -174,7 +176,7 @@ func testUnused(t *testing.T, queries []string) {
 
 	t.Log(sid)
 
-	_, err = Execute(ctx, sid, q)
+	_, err = Query(ctx, sid, q)
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}
@@ -193,7 +195,7 @@ func testFetch(t *testing.T, queries []string) {
 
 	t.Log(sid)
 
-	cid, err := Execute(ctx, sid, q)
+	cid, err := Query(ctx, sid, q)
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 		return
@@ -227,7 +229,7 @@ func testCancel(t *testing.T, queries []string) {
 
 	t.Log(sid)
 
-	cid, err := Execute(ctx, sid, q)
+	cid, err := Query(ctx, sid, q)
 	if err != nil {
 		t.Errorf("%s: %s\n", sid, err.Error())
 		return
@@ -277,7 +279,7 @@ func TestFetchAfterEof(t *testing.T) {
 
 	t.Log(sid)
 
-	cid, err := Execute(ctx, sid, q)
+	cid, err := Query(ctx, sid, q)
 	if err != nil {
 		t.Errorf("%s: %s\n", sid, err.Error())
 		return

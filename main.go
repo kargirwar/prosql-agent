@@ -47,6 +47,7 @@ func main() {
 	r.HandleFunc("/ping", ping).Methods(http.MethodGet, http.MethodOptions)
 	r.HandleFunc("/login", login).Methods(http.MethodGet, http.MethodOptions)
 	r.HandleFunc("/query", query).Methods(http.MethodGet, http.MethodOptions)
+	r.HandleFunc("/execute", execute).Methods(http.MethodGet, http.MethodOptions)
 	r.HandleFunc("/query_ws", query_ws).Methods(http.MethodGet, http.MethodOptions)
 	r.HandleFunc("/fetch", fetch).Methods(http.MethodGet, http.MethodOptions)
 
