@@ -108,7 +108,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 }
 
 //execute query and send results over ws
-func execute_ws(w http.ResponseWriter, r *http.Request) {
+func query_ws(w http.ResponseWriter, r *http.Request) {
 	ctx := getContext(r)
 	defer TimeTrack(ctx, time.Now())
 	ws, err := upgrader.Upgrade(w, r, nil)
@@ -119,14 +119,14 @@ func execute_ws(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ws.Close()
 
-	sid, query, err := getExecuteParams(r)
+	sid, query, err := getQueryParams(r)
 
 	if err != nil {
 		sendError_ws(ctx, ws, err, ERR_INVALID_USER_INPUT)
 		return
 	}
 
-	cid, err := Execute(ctx, sid, query)
+	cid, err := Query(ctx, sid, query)
 	err = Fetch_ws(ctx, sid, cid, ws, BATCH_SIZE)
 
 	if err != nil {
@@ -135,17 +135,17 @@ func execute_ws(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func execute(w http.ResponseWriter, r *http.Request) {
+func query(w http.ResponseWriter, r *http.Request) {
 	defer TimeTrack(r.Context(), time.Now())
 
-	sid, query, err := getExecuteParams(r)
+	sid, query, err := getQueryParams(r)
 
 	if err != nil {
 		sendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
 		return
 	}
 
-	cid, err := Execute(r.Context(), sid, query)
+	cid, err := Query(r.Context(), sid, query)
 
 	if err != nil {
 		sendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
@@ -206,7 +206,7 @@ func getFetchParams(r *http.Request) (string, string, int, error) {
 	return sid[0], cid[0], n, nil
 }
 
-func getExecuteParams(r *http.Request) (string, string, error) {
+func getQueryParams(r *http.Request) (string, string, error) {
 	params := r.URL.Query()
 
 	sid, present := params["session-id"]

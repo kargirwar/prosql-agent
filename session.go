@@ -224,7 +224,7 @@ func NewSession(ctx context.Context, dbtype string, dsn string) (string, error) 
 
 //execute a query and create a cursor for the results
 //results must be retrieved by calling fetch later with the cursor id
-func Execute(ctx context.Context, sid string, query string) (string, error) {
+func Query(ctx context.Context, sid string, query string) (string, error) {
 	defer TimeTrack(ctx, time.Now())
 
 	s, err := sessionStore.get(sid)
