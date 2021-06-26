@@ -114,7 +114,8 @@ func sessionDumper(next http.Handler) http.Handler {
 
 func mw(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "https://dev.prosql.io")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Allow-Headers", "X-Request-ID")
 		w.Header().Set("Content-Type", "application/json")
