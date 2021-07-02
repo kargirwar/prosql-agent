@@ -4,16 +4,17 @@ import (
 	_ "fmt"
 	"net/http"
 	"os"
+	"runtime"
 	"strconv"
 	"time"
-
-	_ "net/http/pprof"
 
 	"github.com/gorilla/mux"
 	_ "github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
+
+const LOG_FILE = "prosql.log"
 
 var logger *lumberjack.Logger
 
@@ -23,15 +24,29 @@ func init() {
 	})
 
 	logger = &lumberjack.Logger{
-		Filename:   "prosql.log",
-		MaxSize:    10, // megabytes
+		Filename:   getLogFileName(),
+		MaxSize:    10, //megabytes
 		MaxBackups: 2,
-		MaxAge:     28,   //days
-		Compress:   true, // disabled by default
+		MaxAge:     28, //days
+		Compress:   true,
 	}
 	log.SetOutput(logger)
 
 	log.SetLevel(log.DebugLevel)
+}
+
+func getLogFileName() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return LOG_FILE
+	}
+
+	//OSX
+	if runtime.GOOS == "darwin" {
+		return home + "/Library/Prosql/" + LOG_FILE
+	}
+
+	return LOG_FILE
 }
 
 func main() {
@@ -44,6 +59,7 @@ func main() {
 	r.Use(sessionDumper)
 
 	//routes
+	r.HandleFunc("/about", about).Methods(http.MethodGet, http.MethodOptions)
 	r.HandleFunc("/ping", ping).Methods(http.MethodGet, http.MethodOptions)
 	r.HandleFunc("/login", login).Methods(http.MethodGet, http.MethodOptions)
 	r.HandleFunc("/query", query).Methods(http.MethodGet, http.MethodOptions)

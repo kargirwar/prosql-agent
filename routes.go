@@ -59,6 +59,13 @@ func getDsn(r *http.Request) (dsn string, err error) {
 	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", user[0], pass[0], host[0], port[0], dbName), nil
 }
 
+func about(w http.ResponseWriter, r *http.Request) {
+	defer TimeTrack(r.Context(), time.Now())
+	sendSuccess(r.Context(), w, struct {
+		Version string `json:"cursor-id"`
+	}{VERSION}, false)
+}
+
 func ping(w http.ResponseWriter, r *http.Request) {
 	defer TimeTrack(r.Context(), time.Now())
 

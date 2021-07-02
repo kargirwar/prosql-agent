@@ -2,6 +2,7 @@ package main
 
 import "time"
 
+const VERSION = "0.1"
 const PORT = 23890
 
 //pool
