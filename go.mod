@@ -1,4 +1,4 @@
-module prosql-go
+module prosql-agent
 
 go 1.15
 
