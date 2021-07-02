@@ -15,6 +15,7 @@ import (
 )
 
 const LOG_FILE = "prosql.log"
+const APP_NAME = "prosql-agent"
 
 var logger *lumberjack.Logger
 

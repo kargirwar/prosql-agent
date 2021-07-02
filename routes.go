@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/denisbrodbeck/machineid"
 	_ "github.com/go-sql-driver/mysql"
 )
 
@@ -61,9 +62,18 @@ func getDsn(r *http.Request) (dsn string, err error) {
 
 func about(w http.ResponseWriter, r *http.Request) {
 	defer TimeTrack(r.Context(), time.Now())
+
+	id, err := machineid.ProtectedID(APP_NAME)
+	if err != nil {
+		id = "not-available"
+	}
+
+	Dbg(r.Context(), "device-id:"+id)
+
 	sendSuccess(r.Context(), w, struct {
+		ID      string `json:"device-id"`
 		Version string `json:"cursor-id"`
-	}{VERSION}, false)
+	}{id, VERSION}, false)
 }
 
 func ping(w http.ResponseWriter, r *http.Request) {
