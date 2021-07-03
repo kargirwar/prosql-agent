@@ -1,4 +1,4 @@
-/* Copyright (C) 2021 Pankaj Kargirwar <kargirwar@gmail.com>
+/* Copyright (C) 2021 Pankaj Kargirwar <kargirwar@protonmail.com>
 
    This file is part of prosql-agent
 
