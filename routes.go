@@ -72,7 +72,7 @@ func about(w http.ResponseWriter, r *http.Request) {
 
 	sendSuccess(r.Context(), w, struct {
 		ID      string `json:"device-id"`
-		Version string `json:"cursor-id"`
+		Version string `json:"version"`
 	}{id, VERSION}, false)
 }
 
