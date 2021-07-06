@@ -23,6 +23,3 @@ jobs:
 
     - name: Build For Mac
       run: GOOS=darwin GOARCH=amd64 go build -o release/mac/prosql-agent
-
-    - name: Test
-      run: go test -v ./...
