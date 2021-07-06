@@ -10,24 +10,24 @@ import (
 	"text/template"
 )
 
-const BINARY = "prosql-agent"
-const LABEL = "io.prosql.agent"
-const PLIST = `<?xml version='1.0' encoding='UTF-8'?>
-<!DOCTYPE plist PUBLIC \"-//Apple Computer//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\" >
-<plist version='1.0'>
-  <dict>
-    <key>Label</key><string>{{.Label}}</string>
-    <key>Program</key><string>{{.Program}}</string>
-	<key>StandardOutPath</key><string>/tmp/{{.Label}}.out.log</string>
-	<key>StandardErrorPath</key><string>/tmp/{{.Label}}.err.log</string>
-    <key>KeepAlive</key><true/>
-    <key>RunAtLoad</key><true/>
-  </dict>
-</plist>
+const UNIT = `
+[Unit]
+Description=prosql-agent for prosql.io
+[Install]
+WantedBy=multi-user.target
+[Service]
+Type=simple
+ExecStart={{.Program}}
+WorkingDirectory={{.WorkingDir}}
+Restart=always
+RestartSec=5
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=%n
 `
 
 func main() {
-	var install = flag.Bool("install", false, "Install agent on your system")
+	var install = flag.Bool("install", false, "Install prosql-agent on your system")
 	var help = flag.Bool("help", false, "Show help message")
 	var uninstall = flag.Bool("uninstall", false, "Uninstall prosql-agent from your system")
 	flag.Parse()
@@ -64,27 +64,41 @@ func main() {
 }
 
 func startAgent() {
-	//create plist and use launchctrl to start service
-	fmt.Println("Creating plist ...")
+	//create unit file and use systemctl to start agent
+	fmt.Println("Creating unit ...")
 	data := struct {
-		Label   string
-		Program string
+		Program    string
+		WorkingDir string
 	}{
-		Label:   LABEL,
-		Program: "/usr/local/bin/prosql-agent"
+		Program:    "prosql-agent",
+		WorkingDir: getCwd(),
 	}
 
-	plist := fmt.Sprintf("%s/Library/LaunchAgents/%s.plist", os.Getenv("HOME"), data.Label)
-	f, err := os.Create(plist)
+	unit := fmt.Sprintf("/etc/systemd/system/prosql-agent.service")
+	f, err := os.Create(unit)
 
-	t := template.Must(template.New("launchdConfig").Parse(PLIST))
+	t := template.Must(template.New("unit").Parse(UNIT))
 	err = t.Execute(f, data)
 	if err != nil {
-		log.Fatalf("Template generation failed: %s", err)
+		log.Fatalf("Unable to create unit file: %s", err)
 	}
-	fmt.Println("Starting ...")
+	fmt.Println("Reloading serivces...")
 
-	cmd := exec.Command("launchctl", "load", plist)
+	cmd := exec.Command("systemctl", "daemon-reload")
+	err = cmd.Run()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Enabling prosql-agent...")
+	cmd = exec.Command("systemctl", "enable", "prosql-agent.service")
+	err = cmd.Run()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Starting prosql-agent...")
+	cmd = exec.Command("systemctl", "start", "prosql-agent.service")
 	err = cmd.Run()
 	if err != nil {
 		log.Fatal(err)
@@ -103,9 +117,8 @@ func getCwd() string {
 func copyAgent() {
 	fmt.Println("Copying agent to /usr/local/bin ...")
 	program := getCwd() + "/prosql-agent"
-
 	//copy executable to /usr/local/bin
-	cpCmd := exec.Command("cp", "-v", program, "/usr/local/bin")
+	cpCmd := exec.Command("cp", program, "/usr/local/bin")
 	err := cpCmd.Run()
 	if err != nil {
 		log.Fatal(err)
@@ -125,18 +138,16 @@ func delAgent() {
 }
 
 func stopAgent() {
-	plist := fmt.Sprintf("%s/Library/LaunchAgents/%s.plist", os.Getenv("HOME"), LABEL)
-
 	fmt.Println("Stopping agent ...")
-	cmd := exec.Command("launchctl", "unload", plist)
+	cmd := exec.Command("systemctl", "stop", "prosql-agent.service")
 	err := cmd.Run()
 	if err != nil {
 		//can't do much about error here
 		log.Println(err)
 	}
 
-	fmt.Println("Deleting plist ...")
-	cmd = exec.Command("rm", "-f", plist)
+	fmt.Println("Deleting unit ...")
+	cmd = exec.Command("rm", "-f", "/etc/systemd/system/prosql-agent.service")
 	err = cmd.Run()
 
 	if err != nil {

@@ -55,6 +55,11 @@ func init() {
 }
 
 func getLogFileName() string {
+	//Linux
+	if runtime.GOOS == "linux" {
+		return "/var/log/prosql-agent/" + LOG_FILE
+	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return LOG_FILE
@@ -62,7 +67,7 @@ func getLogFileName() string {
 
 	//OSX
 	if runtime.GOOS == "darwin" {
-		return home + "/Library/Prosql/" + LOG_FILE
+		return home + "/Library/ProsqlAgent/" + LOG_FILE
 	}
 
 	return LOG_FILE
