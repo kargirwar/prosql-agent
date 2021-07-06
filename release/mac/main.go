@@ -71,7 +71,7 @@ func startAgent() {
 		Program string
 	}{
 		Label:   LABEL,
-		Program: "/usr/local/bin/prosql-agent"
+		Program: "/usr/local/bin/prosql-agent",
 	}
 
 	plist := fmt.Sprintf("%s/Library/LaunchAgents/%s.plist", os.Getenv("HOME"), data.Label)
