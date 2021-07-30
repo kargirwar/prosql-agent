@@ -157,6 +157,7 @@ func query_ws(w http.ResponseWriter, r *http.Request) {
 	sid, query, err := getQueryParams(r)
 
 	if err != nil {
+		Dbg(ctx, fmt.Sprintf("%s", err.Error()))
 		sendError_ws(ctx, ws, err, ERR_INVALID_USER_INPUT)
 		return
 	}

@@ -201,8 +201,6 @@ func createCursor(reqCtx context.Context) *cursor {
 	return &c
 }
 
-//func
-
 //goroutine to handle a single cursor
 func cursorHandler(reqCtx context.Context, c *cursor) {
 	Dbg(reqCtx, fmt.Sprintf("Starting cursorHandler for %s\n", c.id))
@@ -232,33 +230,10 @@ func handleCursorRequest(c *cursor, req *Req) *Res {
 
 	switch req.code {
 	case CMD_FETCH_WS:
-		fallthrough
+		return fetch_ws(c, req)
 
 	case CMD_FETCH:
-		Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_FETCH\n", c.id))
-		fetchReq, _ := req.data.(FetchReq)
-		rows, err := fetchRows(req.ctx, c, fetchReq)
-		if err != nil {
-			Dbg(req.ctx, fmt.Sprintf("%s: %s\n", c.id, err.Error()))
-			return &Res{
-				code: ERROR,
-				data: err,
-			}
-		}
-
-		Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_FETCH\n", c.id))
-
-		var code string
-		if len(*rows) < fetchReq.n {
-			code = EOF
-		} else {
-			code = SUCCESS
-		}
-
-		return &Res{
-			code: code,
-			data: rows,
-		}
+		return fetch_ajax(c, req)
 
 	default:
 		Dbg(req.ctx, fmt.Sprintf("%s: Invalid Command\n", c.id))
@@ -269,8 +244,120 @@ func handleCursorRequest(c *cursor, req *Req) *Res {
 	}
 }
 
+func fetch_ws(c *cursor, req *Req) *Res {
+	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_FETCH\n", c.id))
+	fetchReq, _ := req.data.(FetchReq)
+	err := fetchRows_ws(req.ctx, c, fetchReq)
+	if err != nil {
+		Dbg(req.ctx, fmt.Sprintf("%s: %s\n", c.id, err.Error()))
+		return &Res{
+			code: ERROR,
+			data: err,
+		}
+	}
+
+	Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_FETCH\n", c.id))
+
+	return &Res{
+		code: SUCCESS,
+	}
+}
+
+func fetch_ajax(c *cursor, req *Req) *Res {
+	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_FETCH\n", c.id))
+	fetchReq, _ := req.data.(FetchReq)
+	rows, err := fetchRows(req.ctx, c, fetchReq)
+	if err != nil {
+		Dbg(req.ctx, fmt.Sprintf("%s: %s\n", c.id, err.Error()))
+		return &Res{
+			code: ERROR,
+			data: err,
+		}
+	}
+
+	Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_FETCH\n", c.id))
+
+	var code string
+	if len(*rows) < fetchReq.n {
+		code = EOF
+	} else {
+		code = SUCCESS
+	}
+
+	return &Res{
+		code: code,
+		data: rows,
+	}
+}
+
 type res struct {
 	K []string `json:"k"`
+}
+
+func fetchRows_ws(ctx context.Context, c *cursor, fetchReq FetchReq) error {
+	if fetchReq.cid != c.id {
+		return errors.New(ERR_INVALID_CURSOR_ID)
+	}
+
+	ws := fetchReq.ws
+
+	cols, err := c.rows.Columns()
+	if err != nil {
+		return err
+	}
+
+	vals := make([]interface{}, len(cols))
+
+	n := 0
+	for c.rows.Next() {
+		for i := range cols {
+			vals[i] = &vals[i]
+		}
+
+		err = c.rows.Scan(vals...)
+		// Now you can check each element of vals for nil-ness,
+		if err != nil {
+			return err
+		}
+
+		var r []string
+		for i, c := range cols {
+			r = append(r, c)
+			var v string
+
+			if vals[i] == nil {
+				v = "NULL"
+			} else {
+				b, _ := vals[i].([]byte)
+				v = string(b)
+			}
+
+			r = append(r, v)
+		}
+
+		str, _ := json.Marshal(&res{K: r})
+		err = ws.WriteMessage(websocket.TextMessage, []byte(str))
+		if err != nil {
+			return err
+		}
+
+		n++
+		if n == fetchReq.n {
+			break
+		}
+	}
+
+	if c.rows.Err() != nil {
+		return c.rows.Err()
+	}
+
+	str, _ := json.Marshal(&res{K: []string{"eos"}})
+	err = ws.WriteMessage(websocket.TextMessage, []byte(str))
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func fetchRows(ctx context.Context, c *cursor, fetchReq FetchReq) (*[][]string, error) {
