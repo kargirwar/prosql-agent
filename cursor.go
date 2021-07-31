@@ -209,9 +209,14 @@ loop:
 	for {
 		select {
 		case req := <-c.in:
-			c.setAccessTime()
+			ctx, cancel := context.WithCancel(reqCtx)
+			go startTimer(ctx, c)
+
 			res := handleCursorRequest(c, req)
 			c.out <- res
+
+			cancel()
+
 			if res.code == ERROR || res.code == EOF {
 				//Whatever the error we should exit
 				Dbg(req.ctx, fmt.Sprintf("%s: Shutting down cursorHandler due to %s\n", c.id, res.code))

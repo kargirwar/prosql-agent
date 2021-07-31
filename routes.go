@@ -154,7 +154,7 @@ func query_ws(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ws.Close()
 
-	sid, query, err := getQueryParams(r)
+	sid, query, n, err := getQueryParams_ws(r)
 
 	if err != nil {
 		Dbg(ctx, fmt.Sprintf("%s", err.Error()))
@@ -163,7 +163,7 @@ func query_ws(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cid, err := Query(ctx, sid, query)
-	err = Fetch_ws(ctx, sid, cid, ws, BATCH_SIZE)
+	err = Fetch_ws(ctx, sid, cid, ws, n)
 
 	if err != nil {
 		sendError_ws(ctx, ws, err, ERR_INVALID_USER_INPUT)
@@ -264,6 +264,41 @@ func getFetchParams(r *http.Request) (string, string, int, error) {
 		return "", "", -1, e
 	}
 	return sid[0], cid[0], n, nil
+}
+
+func getQueryParams_ws(r *http.Request) (string, string, int, error) {
+	params := r.URL.Query()
+
+	sid, present := params["session-id"]
+	if !present || len(sid) == 0 {
+		e := errors.New("Session ID not provided")
+		return "", "", -1, e
+	}
+
+	query, present := params["query"]
+	if !present || len(query) == 0 {
+		e := errors.New("Query not provided")
+		return "", "", -1, e
+	}
+
+	q, err := url.QueryUnescape(query[0])
+	if err != nil {
+		return "", "", -1, err
+	}
+
+	num, present := params["num-of-rows"]
+	if !present || len(num) == 0 {
+		e := errors.New("Number of rows not provided")
+		return "", "", -1, e
+	}
+
+	n, err := strconv.Atoi(num[0])
+	if err != nil {
+		e := errors.New("Number of rows must be integer")
+		return "", "", -1, e
+	}
+
+	return sid[0], q, n, nil
 }
 
 func getQueryParams(r *http.Request) (string, string, error) {

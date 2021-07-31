@@ -219,11 +219,19 @@ func handleFetch_ws(s *session, req *Req) {
 
 	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_FETCH_WS for: %s\n", s.id, c.id))
 
+	//star a timer which will keep updating accesstime, so that
+	//it does not get cleaned up. This is useful for long running queries
+	ctx, cancel := context.WithCancel(req.ctx)
+	go startTimer(ctx, s)
+
 	//send fetch request to cursor
 	c.in <- req
 	res := <-c.out
 
-	//Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_FETCH for: %s with code: %s\n", s.id, c.id, res.code))
+	//stop accesstimer
+	cancel()
+
+	Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_FETCH_WS for: %s with code: %s\n", s.id, c.id, res.code))
 	if res.code == ERROR || res.code == EOF {
 		Dbg(req.ctx, fmt.Sprintf("%s: clearing cursor %s\n", s.id, c.id))
 		s.cursorStore.clear(c.id)

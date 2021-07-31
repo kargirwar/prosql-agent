@@ -411,16 +411,6 @@ func createSession(ctx context.Context, dbtype string, dsn string) (*session, er
 		return nil, err
 	}
 
-	//hack. Have n idle connections ready
-	//for i := 0; i < MAX_IDLE_CONNS_AT_START; i++ {
-	//rows, err := pool.QueryContext(ctx1, "select 1")
-	//if err != nil {
-	//return nil, err
-	//}
-	//
-	//rows.Close()
-	//}
-	//
 	var s session
 	s.pool = pool
 	s.accessTime = time.Now()
