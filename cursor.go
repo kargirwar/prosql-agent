@@ -303,7 +303,7 @@ type res struct {
 	K []string `json:"k"`
 }
 
-func getExportFile(ctx context.Context) (*os.File, error) {
+func getExportFile(ctx context.Context) (string, *os.File, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = ""
@@ -313,15 +313,15 @@ func getExportFile(ctx context.Context) (*os.File, error) {
 		t.Year(), t.Month(), t.Day(),
 		t.Hour(), t.Minute(), t.Second())
 
-	p := filepath.FromSlash(home + "/Downloads/" + "query-results-" + now + ".csv")
-	csvFile, err := os.Create(p)
+	f := filepath.FromSlash(home + "/Downloads/" + "query-results-" + now + ".csv")
+	csvFile, err := os.Create(f)
 
 	if err != nil {
 		Dbg(ctx, fmt.Sprintf("failed creating file: %s", err))
-		return nil, err
+		return "", nil, err
 	}
 
-	return csvFile, nil
+	return f, csvFile, nil
 }
 
 func fetchRows_ws(ctx context.Context, c *cursor, fetchReq FetchReq) error {
@@ -335,23 +335,26 @@ func fetchRows_ws(ctx context.Context, c *cursor, fetchReq FetchReq) error {
 	}
 
 	//if results are to be exported, create the output file
-	var csvwriter *csv.Writer
+	var csvWriter *csv.Writer
+	var fileName string
+	var csvFile *os.File
+
 	if fetchReq.export {
-		csvFile, err := getExportFile(ctx)
+		fileName, csvFile, err = getExportFile(ctx)
 
 		if err != nil {
 			Dbg(ctx, fmt.Sprintf("failed creating file: %s", err))
 			return err
 		}
 
-		csvwriter = csv.NewWriter(csvFile)
+		csvWriter = csv.NewWriter(csvFile)
 
-		if err := csvwriter.Write(cols); err != nil {
+		if err := csvWriter.Write(cols); err != nil {
 			Dbg(ctx, fmt.Sprintf("error writing record to csv:", err))
 		}
 
 		defer func() {
-			csvwriter.Flush()
+			csvWriter.Flush()
 			csvFile.Close()
 		}()
 	}
@@ -386,7 +389,7 @@ func fetchRows_ws(ctx context.Context, c *cursor, fetchReq FetchReq) error {
 			r = append(r, v)
 		}
 
-		err = processRow(ctx, r, (n + 1), ws, csvwriter, fetchReq.export)
+		err = processRow(ctx, r, (n + 1), ws, fileName, csvWriter, fetchReq.export)
 		if err != nil {
 			return err
 		}
@@ -401,6 +404,14 @@ func fetchRows_ws(ctx context.Context, c *cursor, fetchReq FetchReq) error {
 		return c.rows.Err()
 	}
 
+	if n < 1000 && fetchReq.export {
+		str, _ := json.Marshal(&res{K: []string{"current-row", strconv.Itoa(n)}})
+		err := ws.WriteMessage(websocket.TextMessage, []byte(str))
+		if err != nil {
+			return err
+		}
+	}
+
 	str, _ := json.Marshal(&res{K: []string{"eos"}})
 	err = ws.WriteMessage(websocket.TextMessage, []byte(str))
 	if err != nil {
@@ -411,7 +422,7 @@ func fetchRows_ws(ctx context.Context, c *cursor, fetchReq FetchReq) error {
 }
 
 func processRow(ctx context.Context, row []string, currRow int,
-	ws *websocket.Conn, csvwriter *csv.Writer, export bool) error {
+	ws *websocket.Conn, fileName string, csvWriter *csv.Writer, export bool) error {
 
 	if export {
 		var r []string
@@ -419,9 +430,17 @@ func processRow(ctx context.Context, row []string, currRow int,
 			r = append(r, row[i])
 		}
 
-		if err := csvwriter.Write(r); err != nil {
+		if err := csvWriter.Write(r); err != nil {
 			Dbg(ctx, fmt.Sprintf("error writing record to csv:", err))
 			return err
+		}
+
+		if currRow == 1 {
+			str, _ := json.Marshal(&res{K: []string{"file-name", fileName}})
+			err := ws.WriteMessage(websocket.TextMessage, []byte(str))
+			if err != nil {
+				return err
+			}
 		}
 
 		if currRow%1000 == 0 {
