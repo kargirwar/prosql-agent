@@ -42,6 +42,13 @@ type Response struct {
 	Eof       bool        `json:"eof"`
 }
 
+type QueryParams struct {
+	SessionId string
+	Query     string
+	NumOfRows int
+	Export    bool
+}
+
 func getDsn(r *http.Request) (dsn string, err error) {
 	params := r.URL.Query()
 
@@ -154,7 +161,7 @@ func query_ws(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ws.Close()
 
-	sid, query, n, err := getQueryParams_ws(r)
+	params, err := getQueryParams_ws(r)
 
 	if err != nil {
 		Dbg(ctx, fmt.Sprintf("%s", err.Error()))
@@ -162,8 +169,8 @@ func query_ws(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cid, err := Query(ctx, sid, query)
-	err = Fetch_ws(ctx, sid, cid, ws, n)
+	cid, err := Query(ctx, params.SessionId, params.Query)
+	err = Fetch_ws(ctx, params.SessionId, cid, ws, params.NumOfRows, params.Export)
 
 	if err != nil {
 		sendError_ws(ctx, ws, err, ERR_INVALID_USER_INPUT)
@@ -266,39 +273,51 @@ func getFetchParams(r *http.Request) (string, string, int, error) {
 	return sid[0], cid[0], n, nil
 }
 
-func getQueryParams_ws(r *http.Request) (string, string, int, error) {
-	params := r.URL.Query()
+func getQueryParams_ws(r *http.Request) (*QueryParams, error) {
+	var params QueryParams
+	input := r.URL.Query()
 
-	sid, present := params["session-id"]
+	sid, present := input["session-id"]
 	if !present || len(sid) == 0 {
 		e := errors.New("Session ID not provided")
-		return "", "", -1, e
+		return nil, e
 	}
 
-	query, present := params["query"]
+	params.SessionId = sid[0]
+
+	query, present := input["query"]
 	if !present || len(query) == 0 {
 		e := errors.New("Query not provided")
-		return "", "", -1, e
+		return nil, e
 	}
 
 	q, err := url.QueryUnescape(query[0])
 	if err != nil {
-		return "", "", -1, err
+		return nil, err
 	}
 
-	num, present := params["num-of-rows"]
+	params.Query = q
+
+	num, present := input["num-of-rows"]
 	if !present || len(num) == 0 {
 		e := errors.New("Number of rows not provided")
-		return "", "", -1, e
+		return nil, e
 	}
 
 	n, err := strconv.Atoi(num[0])
 	if err != nil {
 		e := errors.New("Number of rows must be integer")
-		return "", "", -1, e
+		return nil, e
 	}
 
-	return sid[0], q, n, nil
+	params.NumOfRows = n
+	//whether to export to file or not
+	_, present = input["export"]
+	if present {
+		params.Export = true
+	}
+
+	return &params, nil
 }
 
 func getQueryParams(r *http.Request) (string, string, error) {

@@ -142,9 +142,10 @@ type Res struct {
 }
 
 type FetchReq struct {
-	cid string
-	n   int
-	ws  *websocket.Conn
+	cid    string
+	n      int
+	ws     *websocket.Conn
+	export bool
 }
 
 //==============================================================//
@@ -274,7 +275,7 @@ func Query(ctx context.Context, sid string, query string) (string, error) {
 
 //fetch n rows from session sid using cursor cid. The cursor will directly
 //send data on websocket channel ws
-func Fetch_ws(ctx context.Context, sid string, cid string, ws *websocket.Conn, n int) error {
+func Fetch_ws(ctx context.Context, sid string, cid string, ws *websocket.Conn, n int, export bool) error {
 	defer TimeTrack(ctx, time.Now())
 
 	s, err := sessionStore.get(sid)
@@ -287,9 +288,10 @@ func Fetch_ws(ctx context.Context, sid string, cid string, ws *websocket.Conn, n
 		ctx:  ctx,
 		code: CMD_FETCH_WS,
 		data: FetchReq{
-			cid: cid,
-			n:   n,
-			ws:  ws,
+			cid:    cid,
+			n:      n,
+			ws:     ws,
+			export: export,
 		},
 		resChan: ch,
 	}

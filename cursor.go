@@ -19,8 +19,12 @@
 package main
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
 	"time"
 
 	"context"
@@ -299,21 +303,63 @@ type res struct {
 	K []string `json:"k"`
 }
 
+func getExportFile(ctx context.Context) (*os.File, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = ""
+	}
+	t := time.Now()
+	now := fmt.Sprintf("%d-%02d-%02dT%02d-%02d-%02d",
+		t.Year(), t.Month(), t.Day(),
+		t.Hour(), t.Minute(), t.Second())
+
+	p := filepath.FromSlash(home + "/Downloads/" + "query-results-" + now + ".csv")
+	csvFile, err := os.Create(p)
+
+	if err != nil {
+		Dbg(ctx, fmt.Sprintf("failed creating file: %s", err))
+		return nil, err
+	}
+
+	return csvFile, nil
+}
+
 func fetchRows_ws(ctx context.Context, c *cursor, fetchReq FetchReq) error {
 	if fetchReq.cid != c.id {
 		return errors.New(ERR_INVALID_CURSOR_ID)
 	}
-
-	ws := fetchReq.ws
 
 	cols, err := c.rows.Columns()
 	if err != nil {
 		return err
 	}
 
-	vals := make([]interface{}, len(cols))
+	//if results are to be exported, create the output file
+	var csvwriter *csv.Writer
+	if fetchReq.export {
+		csvFile, err := getExportFile(ctx)
+
+		if err != nil {
+			Dbg(ctx, fmt.Sprintf("failed creating file: %s", err))
+			return err
+		}
+
+		csvwriter = csv.NewWriter(csvFile)
+
+		if err := csvwriter.Write(cols); err != nil {
+			Dbg(ctx, fmt.Sprintf("error writing record to csv:", err))
+		}
+
+		defer func() {
+			csvwriter.Flush()
+			csvFile.Close()
+		}()
+	}
 
 	n := 0
+	ws := fetchReq.ws
+	vals := make([]interface{}, len(cols))
+
 	for c.rows.Next() {
 		for i := range cols {
 			vals[i] = &vals[i]
@@ -340,8 +386,7 @@ func fetchRows_ws(ctx context.Context, c *cursor, fetchReq FetchReq) error {
 			r = append(r, v)
 		}
 
-		str, _ := json.Marshal(&res{K: r})
-		err = ws.WriteMessage(websocket.TextMessage, []byte(str))
+		err = processRow(ctx, r, (n + 1), ws, csvwriter, fetchReq.export)
 		if err != nil {
 			return err
 		}
@@ -358,6 +403,40 @@ func fetchRows_ws(ctx context.Context, c *cursor, fetchReq FetchReq) error {
 
 	str, _ := json.Marshal(&res{K: []string{"eos"}})
 	err = ws.WriteMessage(websocket.TextMessage, []byte(str))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func processRow(ctx context.Context, row []string, currRow int,
+	ws *websocket.Conn, csvwriter *csv.Writer, export bool) error {
+
+	if export {
+		var r []string
+		for i := 1; i <= len(row); i += 2 {
+			r = append(r, row[i])
+		}
+
+		if err := csvwriter.Write(r); err != nil {
+			Dbg(ctx, fmt.Sprintf("error writing record to csv:", err))
+			return err
+		}
+
+		if currRow%1000 == 0 {
+			str, _ := json.Marshal(&res{K: []string{"current-row", strconv.Itoa(currRow)}})
+			err := ws.WriteMessage(websocket.TextMessage, []byte(str))
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}
+
+	str, _ := json.Marshal(&res{K: row})
+	err := ws.WriteMessage(websocket.TextMessage, []byte(str))
 	if err != nil {
 		return err
 	}
