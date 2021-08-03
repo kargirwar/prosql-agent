@@ -66,7 +66,7 @@ func TestFetch(t *testing.T) {
 
 	t.Log(sid)
 
-	cid, err := Query(ctx, sid, "select * from users limit 999")
+	cid, err := Query(ctx, sid, "select id from `bills-1` limit 10000")
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}

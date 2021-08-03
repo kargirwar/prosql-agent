@@ -44,6 +44,7 @@ type Response struct {
 
 type QueryParams struct {
 	SessionId string
+	CursorId  string
 	Query     string
 	NumOfRows int
 	Export    bool
@@ -169,35 +170,6 @@ func cancel(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-//execute query and send results over ws
-func query_ws(w http.ResponseWriter, r *http.Request) {
-	ctx := getContext(r)
-	defer TimeTrack(ctx, time.Now())
-	ws, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Println(err)
-		Dbg(ctx, fmt.Sprintf("%s", err.Error()))
-		return
-	}
-	defer ws.Close()
-
-	params, err := getQueryParams_ws(r)
-
-	if err != nil {
-		Dbg(ctx, fmt.Sprintf("%s", err.Error()))
-		sendError_ws(ctx, ws, err, ERR_INVALID_USER_INPUT)
-		return
-	}
-
-	cid, err := Query(ctx, params.SessionId, params.Query)
-	err = Fetch_ws(ctx, params.SessionId, cid, ws, params.NumOfRows, params.Export)
-
-	if err != nil {
-		sendError_ws(ctx, ws, err, ERR_INVALID_USER_INPUT)
-		return
-	}
-}
-
 //execute query and return its cursor id for later use
 func query(w http.ResponseWriter, r *http.Request) {
 	defer TimeTrack(r.Context(), time.Now())
@@ -264,6 +236,33 @@ func fetch(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(r.Context(), w, rows, eof)
 }
 
+func fetch_ws(w http.ResponseWriter, r *http.Request) {
+	ctx := getContext(r)
+	defer TimeTrack(ctx, time.Now())
+
+	ws, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println(err)
+		Dbg(ctx, fmt.Sprintf("%s", err.Error()))
+		return
+	}
+	defer ws.Close()
+
+	params, err := getFetchParams_ws(r)
+
+	if err != nil {
+		sendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
+		return
+	}
+
+	err = Fetch_ws(ctx, params.SessionId, params.CursorId, ws, params.NumOfRows, params.Export)
+
+	if err != nil {
+		sendError_ws(ctx, ws, err, ERR_INVALID_USER_INPUT)
+		return
+	}
+}
+
 func getFetchParams(r *http.Request) (string, string, int, error) {
 	params := r.URL.Query()
 
@@ -293,7 +292,7 @@ func getFetchParams(r *http.Request) (string, string, int, error) {
 	return sid[0], cid[0], n, nil
 }
 
-func getQueryParams_ws(r *http.Request) (*QueryParams, error) {
+func getFetchParams_ws(r *http.Request) (*QueryParams, error) {
 	var params QueryParams
 	input := r.URL.Query()
 
@@ -305,18 +304,13 @@ func getQueryParams_ws(r *http.Request) (*QueryParams, error) {
 
 	params.SessionId = sid[0]
 
-	query, present := input["query"]
-	if !present || len(query) == 0 {
-		e := errors.New("Query not provided")
+	cid, present := input["cursor-id"]
+	if !present || len(sid) == 0 {
+		e := errors.New("Cursor ID not provided")
 		return nil, e
 	}
 
-	q, err := url.QueryUnescape(query[0])
-	if err != nil {
-		return nil, err
-	}
-
-	params.Query = q
+	params.CursorId = cid[0]
 
 	num, present := input["num-of-rows"]
 	if !present || len(num) == 0 {

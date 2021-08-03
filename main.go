@@ -33,7 +33,6 @@ import (
 )
 
 const LOG_FILE = "prosql.log"
-const APP_NAME = "prosql-agent"
 
 var logger *lumberjack.Logger
 
@@ -88,8 +87,8 @@ func main() {
 	r.HandleFunc("/login", login).Methods(http.MethodGet, http.MethodOptions)
 	r.HandleFunc("/query", query).Methods(http.MethodGet, http.MethodOptions)
 	r.HandleFunc("/execute", execute).Methods(http.MethodGet, http.MethodOptions)
-	r.HandleFunc("/query_ws", query_ws).Methods(http.MethodGet, http.MethodOptions)
 	r.HandleFunc("/fetch", fetch).Methods(http.MethodGet, http.MethodOptions)
+	r.HandleFunc("/fetch_ws", fetch_ws).Methods(http.MethodGet, http.MethodOptions)
 	r.HandleFunc("/cancel", cancel).Methods(http.MethodGet, http.MethodOptions)
 
 	http.Handle("/", r)

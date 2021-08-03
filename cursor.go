@@ -239,10 +239,10 @@ func handleCursorRequest(c *cursor, req *Req) *Res {
 
 	switch req.code {
 	case CMD_FETCH_WS:
-		return fetch_ws(c, req)
+		return handle_ws(c, req)
 
 	case CMD_FETCH:
-		return fetch_ajax(c, req)
+		return handle_ajax(c, req)
 
 	default:
 		Dbg(req.ctx, fmt.Sprintf("%s: Invalid Command\n", c.id))
@@ -253,7 +253,7 @@ func handleCursorRequest(c *cursor, req *Req) *Res {
 	}
 }
 
-func fetch_ws(c *cursor, req *Req) *Res {
+func handle_ws(c *cursor, req *Req) *Res {
 	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_FETCH\n", c.id))
 	fetchReq, _ := req.data.(FetchReq)
 	err := fetchRows_ws(req.ctx, c, fetchReq)
@@ -272,7 +272,7 @@ func fetch_ws(c *cursor, req *Req) *Res {
 	}
 }
 
-func fetch_ajax(c *cursor, req *Req) *Res {
+func handle_ajax(c *cursor, req *Req) *Res {
 	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_FETCH\n", c.id))
 	fetchReq, _ := req.data.(FetchReq)
 	rows, err := fetchRows(req.ctx, c, fetchReq)
@@ -350,7 +350,7 @@ func fetchRows_ws(ctx context.Context, c *cursor, fetchReq FetchReq) error {
 		csvWriter = csv.NewWriter(csvFile)
 
 		if err := csvWriter.Write(cols); err != nil {
-			Dbg(ctx, fmt.Sprintf("error writing record to csv:", err))
+			Dbg(ctx, fmt.Sprintf("error writing record to csv: %s", err))
 		}
 
 		defer func() {
@@ -431,7 +431,7 @@ func processRow(ctx context.Context, cursorId string, row []string, currRow int,
 		}
 
 		if err := csvWriter.Write(r); err != nil {
-			Dbg(ctx, fmt.Sprintf("error writing record to csv:", err))
+			Dbg(ctx, fmt.Sprintf("error writing record to csv: %s", err))
 			return err
 		}
 
