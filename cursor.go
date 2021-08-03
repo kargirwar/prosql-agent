@@ -389,7 +389,7 @@ func fetchRows_ws(ctx context.Context, c *cursor, fetchReq FetchReq) error {
 			r = append(r, v)
 		}
 
-		err = processRow(ctx, r, (n + 1), ws, fileName, csvWriter, fetchReq.export)
+		err = processRow(ctx, c.id, r, (n + 1), ws, fileName, csvWriter, fetchReq.export)
 		if err != nil {
 			return err
 		}
@@ -421,7 +421,7 @@ func fetchRows_ws(ctx context.Context, c *cursor, fetchReq FetchReq) error {
 	return nil
 }
 
-func processRow(ctx context.Context, row []string, currRow int,
+func processRow(ctx context.Context, cursorId string, row []string, currRow int,
 	ws *websocket.Conn, fileName string, csvWriter *csv.Writer, export bool) error {
 
 	if export {
@@ -436,7 +436,7 @@ func processRow(ctx context.Context, row []string, currRow int,
 		}
 
 		if currRow == 1 {
-			str, _ := json.Marshal(&res{K: []string{"file-name", fileName}})
+			str, _ := json.Marshal(&res{K: []string{"header", cursorId, fileName}})
 			err := ws.WriteMessage(websocket.TextMessage, []byte(str))
 			if err != nil {
 				return err
