@@ -149,6 +149,26 @@ func login(w http.ResponseWriter, r *http.Request) {
 	}{sid}, false)
 }
 
+func cancel(w http.ResponseWriter, r *http.Request) {
+	ctx := getContext(r)
+	defer TimeTrack(ctx, time.Now())
+
+	sid, cid, err := getCancelParams(r)
+
+	if err != nil {
+		Dbg(ctx, fmt.Sprintf("%s", err.Error()))
+		sendError(ctx, w, err, ERR_INVALID_USER_INPUT)
+		return
+	}
+
+	err = Cancel(ctx, sid, cid)
+	if err != nil {
+		Dbg(ctx, fmt.Sprintf("%s", err.Error()))
+		sendError(ctx, w, err, ERR_INVALID_USER_INPUT)
+		return
+	}
+}
+
 //execute query and send results over ws
 func query_ws(w http.ResponseWriter, r *http.Request) {
 	ctx := getContext(r)
@@ -318,6 +338,24 @@ func getQueryParams_ws(r *http.Request) (*QueryParams, error) {
 	}
 
 	return &params, nil
+}
+
+func getCancelParams(r *http.Request) (string, string, error) {
+	params := r.URL.Query()
+
+	sid, present := params["session-id"]
+	if !present || len(sid) == 0 {
+		e := errors.New("Session ID not provided")
+		return "", "", e
+	}
+
+	cid, present := params["cursor-id"]
+	if !present || len(cid) == 0 {
+		e := errors.New("Cursor ID not provided")
+		return "", "", e
+	}
+
+	return sid[0], cid[0], nil
 }
 
 func getQueryParams(r *http.Request) (string, string, error) {

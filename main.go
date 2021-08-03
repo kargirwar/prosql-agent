@@ -90,6 +90,7 @@ func main() {
 	r.HandleFunc("/execute", execute).Methods(http.MethodGet, http.MethodOptions)
 	r.HandleFunc("/query_ws", query_ws).Methods(http.MethodGet, http.MethodOptions)
 	r.HandleFunc("/fetch", fetch).Methods(http.MethodGet, http.MethodOptions)
+	r.HandleFunc("/cancel", cancel).Methods(http.MethodGet, http.MethodOptions)
 
 	http.Handle("/", r)
 
