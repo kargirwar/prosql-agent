@@ -100,6 +100,13 @@ func (pc *cursor) execute(ctx context.Context, s *session, query string) (int64,
 	return rows, nil
 }
 
+func (pc *cursor) getId() string {
+	pc.mutex.Lock()
+	defer pc.mutex.Unlock()
+
+	return pc.id
+}
+
 func (pc *cursor) setAccessTime() {
 	pc.mutex.Lock()
 	defer pc.mutex.Unlock()
@@ -213,7 +220,7 @@ loop:
 	for {
 		select {
 		case req := <-c.in:
-			ctx, cancel := context.WithCancel(reqCtx)
+			ctx, cancel := context.WithCancel(req.ctx)
 			go startTimer(ctx, c)
 
 			res := handleCursorRequest(c, req)
@@ -254,7 +261,7 @@ func handleCursorRequest(c *cursor, req *Req) *Res {
 }
 
 func handle_ws(c *cursor, req *Req) *Res {
-	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_FETCH\n", c.id))
+	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_FETCH_WS\n", c.id))
 	fetchReq, _ := req.data.(FetchReq)
 	err := fetchRows_ws(req.ctx, c, fetchReq)
 	if err != nil {

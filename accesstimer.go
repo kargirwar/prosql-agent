@@ -26,21 +26,24 @@ import (
 
 type accessTimeInterface interface {
 	setAccessTime()
+	getId() string
 }
 
 const UPDATE_TIME = 10 //seconds
 
 func startTimer(ctx context.Context, p accessTimeInterface) {
 	ticker := time.NewTicker(UPDATE_TIME * time.Second)
-	Dbg(ctx, fmt.Sprintf("Starting accesstimer"))
+	defer ticker.Stop()
+	Dbg(ctx, fmt.Sprintf("Starting accesstimer for %s", p.getId()))
 loop:
 	for {
 		select {
 		case <-ctx.Done():
-			Dbg(ctx, fmt.Sprintf("Stopping accesstimer"))
+			Dbg(ctx, fmt.Sprintf("Stopping accesstimer for %s", p.getId()))
 			break loop
 
 		case <-ticker.C:
+			Dbg(ctx, fmt.Sprintf("Setting accesstime for %s", p.getId()))
 			p.setAccessTime()
 		}
 	}

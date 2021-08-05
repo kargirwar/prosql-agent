@@ -51,6 +51,13 @@ type session struct {
 	mutex       sync.Mutex
 }
 
+func (ps *session) getId() string {
+	ps.mutex.Lock()
+	defer ps.mutex.Unlock()
+
+	return ps.id
+}
+
 func (ps *session) setAccessTime() {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
