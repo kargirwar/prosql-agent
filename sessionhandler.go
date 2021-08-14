@@ -163,8 +163,7 @@ func handleQuery(s *session, req *Req) {
 	query, _ := req.data.(string)
 	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_QUERY for: %s\n", s.id, query))
 
-	c := NewQueryCursor(req.ctx)
-	c.start(req.ctx, s, query)
+	c := NewQueryCursor(req.ctx, query)
 	s.cursorStore.set(c.id, c)
 
 	Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_QUERY for: %s\n", s.id, query))
@@ -183,8 +182,8 @@ func handleExecute(s *session, req *Req) {
 	query, _ := req.data.(string)
 	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_EXECUTE for: %s\n", s.id, query))
 
-	c := NewExecuteCursor(req.ctx)
-	n, err := c.execute(req.ctx, s, query)
+	c := NewExecuteCursor(req.ctx, query)
+	n, err := c.execute(req.ctx, s)
 
 	if err != nil {
 		req.resChan <- &Res{
@@ -208,6 +207,16 @@ func handleFetch_ws(s *session, req *Req) {
 	//just pass on to appropriate cursor
 	fetchReq, _ := req.data.(FetchReq)
 	c, err := s.cursorStore.get(fetchReq.cid)
+
+	if err != nil {
+		req.resChan <- &Res{
+			code: ERROR,
+			data: err,
+		}
+		return
+	}
+
+	err = c.start(req.ctx, s)
 
 	if err != nil {
 		req.resChan <- &Res{
@@ -243,6 +252,16 @@ func handleFetch(s *session, req *Req) {
 	//just pass on to appropriate cursor and wait for results
 	fetchReq, _ := req.data.(FetchReq)
 	c, err := s.cursorStore.get(fetchReq.cid)
+
+	if err != nil {
+		req.resChan <- &Res{
+			code: ERROR,
+			data: err,
+		}
+		return
+	}
+
+	err = c.start(req.ctx, s)
 
 	if err != nil {
 		req.resChan <- &Res{

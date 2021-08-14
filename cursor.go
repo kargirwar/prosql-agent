@@ -53,43 +53,41 @@ type cursor struct {
 	query      string
 }
 
-func (pc *cursor) start(ctx context.Context, s *session, query string) error {
+func (pc *cursor) start(ctx context.Context, s *session) error {
 	defer TimeTrack(ctx, time.Now())
 
 	pc.mutex.Lock()
 	defer pc.mutex.Unlock()
 
-	Dbg(ctx, "Starting query: "+query)
+	Dbg(ctx, "Starting query: "+pc.query)
 
-	rows, err := s.pool.QueryContext(pc.ctx, query)
+	rows, err := s.pool.QueryContext(pc.ctx, pc.query)
 	if err != nil {
 		pc.err = err
 		return err
 	}
 
-	Dbg(ctx, "Done query: "+query)
+	Dbg(ctx, "Done query: "+pc.query)
 
 	pc.rows = rows
-	pc.query = query
-
 	return nil
 }
 
-func (pc *cursor) execute(ctx context.Context, s *session, query string) (int64, error) {
+func (pc *cursor) execute(ctx context.Context, s *session) (int64, error) {
 	defer TimeTrack(ctx, time.Now())
 
 	pc.mutex.Lock()
 	defer pc.mutex.Unlock()
 
-	Dbg(ctx, "Starting query: "+query)
+	Dbg(ctx, "Starting query: "+pc.query)
 
-	result, err := s.pool.ExecContext(pc.ctx, query)
+	result, err := s.pool.ExecContext(pc.ctx, pc.query)
 	if err != nil {
 		pc.err = err
 		return -1, err
 	}
 
-	Dbg(ctx, "Done query: "+query)
+	Dbg(ctx, "Done query: "+pc.query)
 
 	rows, err := result.RowsAffected()
 	if err != nil {
@@ -188,18 +186,18 @@ func NewCursorStore() *cursors {
 //          cursor structs and methods end
 //==============================================================//
 
-func NewQueryCursor(reqCtx context.Context) *cursor {
-	c := createCursor(reqCtx)
+func NewQueryCursor(reqCtx context.Context, query string) *cursor {
+	c := createCursor(reqCtx, query)
 	go cursorHandler(reqCtx, c)
 	return c
 }
 
-func NewExecuteCursor(reqCtx context.Context) *cursor {
-	c := createCursor(reqCtx)
+func NewExecuteCursor(reqCtx context.Context, query string) *cursor {
+	c := createCursor(reqCtx, query)
 	return c
 }
 
-func createCursor(reqCtx context.Context) *cursor {
+func createCursor(reqCtx context.Context, query string) *cursor {
 	var c cursor
 	ctx, cancel := context.WithCancel(context.Background())
 	c.id = uniuri.New()
@@ -208,6 +206,7 @@ func createCursor(reqCtx context.Context) *cursor {
 	c.accessTime = time.Now()
 	c.ctx = ctx
 	c.cancel = cancel
+	c.query = query
 
 	return &c
 }
@@ -405,6 +404,8 @@ func fetchRows_ws(ctx context.Context, c *cursor, fetchReq FetchReq) error {
 		if n == fetchReq.n {
 			break
 		}
+
+		//time.Sleep(500 * time.Millisecond)
 	}
 
 	if c.rows.Err() != nil {

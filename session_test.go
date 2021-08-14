@@ -66,7 +66,9 @@ func TestFetch(t *testing.T) {
 
 	t.Log(sid)
 
-	cid, err := Query(ctx, sid, "select id from `bills-1` limit 10000")
+	//cid, err := Query(ctx, sid, "select id from `bills-1` limit 10000")
+	cid, err := Query(ctx, sid, "select * from `bills-1` order by `serial` desc")
+	//cid, err := Query(ctx, sid, "select * from `billss-1`")
 	if err != nil {
 		t.Errorf("%s\n", err.Error())
 	}
