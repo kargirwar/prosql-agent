@@ -59,6 +59,11 @@ func (pc *cursor) start(ctx context.Context, s *session) error {
 	pc.mutex.Lock()
 	defer pc.mutex.Unlock()
 
+	if pc.rows != nil {
+		Dbg(ctx, "Continue with current query")
+		return nil
+	}
+
 	Dbg(ctx, "Starting query: "+pc.query)
 
 	rows, err := s.pool.QueryContext(pc.ctx, pc.query)
