@@ -51,6 +51,7 @@ type cursor struct {
 	mutex      sync.Mutex
 	err        error
 	query      string
+	execute    bool
 }
 
 func (pc *cursor) start(ctx context.Context, s *session) error {
@@ -78,7 +79,7 @@ func (pc *cursor) start(ctx context.Context, s *session) error {
 	return nil
 }
 
-func (pc *cursor) execute(ctx context.Context, s *session) (int64, error) {
+func (pc *cursor) exec(ctx context.Context, s *session) (int64, error) {
 	defer TimeTrack(ctx, time.Now())
 
 	pc.mutex.Lock()
@@ -108,6 +109,13 @@ func (pc *cursor) getId() string {
 	defer pc.mutex.Unlock()
 
 	return pc.id
+}
+
+func (pc *cursor) isExecute() bool {
+	pc.mutex.Lock()
+	defer pc.mutex.Unlock()
+
+	return pc.execute
 }
 
 func (pc *cursor) setAccessTime() {
@@ -192,17 +200,17 @@ func NewCursorStore() *cursors {
 //==============================================================//
 
 func NewQueryCursor(reqCtx context.Context, query string) *cursor {
-	c := createCursor(reqCtx, query)
+	c := createCursor(reqCtx, query, false)
 	go cursorHandler(reqCtx, c)
 	return c
 }
 
 func NewExecuteCursor(reqCtx context.Context, query string) *cursor {
-	c := createCursor(reqCtx, query)
+	c := createCursor(reqCtx, query, true)
 	return c
 }
 
-func createCursor(reqCtx context.Context, query string) *cursor {
+func createCursor(reqCtx context.Context, query string, isExecute bool) *cursor {
 	var c cursor
 	ctx, cancel := context.WithCancel(context.Background())
 	c.id = uniuri.New()
@@ -212,6 +220,7 @@ func createCursor(reqCtx context.Context, query string) *cursor {
 	c.ctx = ctx
 	c.cancel = cancel
 	c.query = query
+	c.execute = isExecute
 
 	return &c
 }

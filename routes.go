@@ -204,7 +204,7 @@ func execute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	n, err := Execute(r.Context(), sid, query)
+	cid, err := Execute(r.Context(), sid, query)
 
 	if err != nil {
 		sendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
@@ -212,8 +212,8 @@ func execute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sendSuccess(r.Context(), w, struct {
-		RowsAffected int64 `json:"rows-affected"`
-	}{n}, false)
+		CursorId string `json:"cursor-id"`
+	}{cid}, false)
 }
 
 func fetch(w http.ResponseWriter, r *http.Request) {

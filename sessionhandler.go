@@ -183,21 +183,13 @@ func handleExecute(s *session, req *Req) {
 	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_EXECUTE for: %s\n", s.id, query))
 
 	c := NewExecuteCursor(req.ctx, query)
-	n, err := c.execute(req.ctx, s)
-
-	if err != nil {
-		req.resChan <- &Res{
-			code: ERROR,
-			data: err,
-		}
-		return
-	}
+	s.cursorStore.set(c.id, c)
 
 	Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_EXECUTE for: %s\n", s.id, query))
 
 	req.resChan <- &Res{
 		code: SUCCESS,
-		data: n,
+		data: c.id,
 	}
 
 	Dbg(req.ctx, fmt.Sprintf("%s: Sent Response CMD_EXECUTE for: %s\n", s.id, query))
@@ -261,6 +253,37 @@ func handleFetch(s *session, req *Req) {
 		return
 	}
 
+	if c.isExecute() {
+		//if this is execute type return result immediately
+		n, err := c.exec(req.ctx, s)
+
+		if err != nil {
+			req.resChan <- &Res{
+				code: ERROR,
+				data: err,
+			}
+			s.cursorStore.clear(c.id)
+			return
+		}
+
+		Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_FETCH for: %s\n", c.id))
+
+		var results [][]string
+		r := []string{"rows-affected", fmt.Sprintf("%d", n)}
+		results = append(results, r)
+
+		req.resChan <- &Res{
+			code: SUCCESS,
+			data: &results,
+		}
+
+		s.cursorStore.clear(c.id)
+
+		Dbg(req.ctx, fmt.Sprintf("%s: Sent Response CMD_FETCH for: %s\n", c.id))
+		return
+	}
+
+	//otherwise let cursorhandler take care of this
 	err = c.start(req.ctx, s)
 
 	if err != nil {

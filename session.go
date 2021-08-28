@@ -348,12 +348,12 @@ func Fetch(ctx context.Context, sid string, cid string, n int) (*[][]string, boo
 	return res.data.(*[][]string), eof, nil
 }
 
-func Execute(ctx context.Context, sid string, query string) (int64, error) {
+func Execute(ctx context.Context, sid string, query string) (string, error) {
 	defer TimeTrack(ctx, time.Now())
 
 	s, err := sessionStore.get(sid)
 	if err != nil {
-		return -1, err
+		return "", err
 	}
 
 	Dbg(ctx, fmt.Sprintf("%s", s))
@@ -370,12 +370,8 @@ func Execute(ctx context.Context, sid string, query string) (int64, error) {
 	Dbg(ctx, fmt.Sprintf("%s Send CMD_EXECUTE for %s", s.id, query))
 
 	res := <-ch
-	if res.code == ERROR {
-		return -1, res.data.(error)
-	}
-
 	Dbg(ctx, fmt.Sprintf("%s Received Response for %s", s.id, query))
-	return res.data.(int64), nil
+	return res.data.(string), nil
 }
 
 //cancel a running query
