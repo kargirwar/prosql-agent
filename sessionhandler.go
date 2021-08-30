@@ -254,6 +254,8 @@ func handleFetch(s *session, req *Req) {
 	}
 
 	if c.isExecute() {
+		//debug
+		//time.Sleep(10 * time.Second)
 		//if this is execute type return result immediately
 		n, err := c.exec(req.ctx, s)
 

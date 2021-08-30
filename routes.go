@@ -168,6 +168,8 @@ func cancel(w http.ResponseWriter, r *http.Request) {
 		sendError(ctx, w, err, ERR_INVALID_USER_INPUT)
 		return
 	}
+
+	sendSuccess(r.Context(), w, nil, false)
 }
 
 //execute query and return its cursor id for later use
