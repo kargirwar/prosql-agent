@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"archive/zip"
@@ -11,6 +11,8 @@ import (
 	"strings"
 )
 
+const CURRENT_RELEASE = "https://raw.githubusercontent.com/kargirwar/prosql-agent/master/current-release.json"
+
 type Release struct {
 	Version string
 	Mac     string
@@ -18,7 +20,7 @@ type Release struct {
 	Windows string
 }
 
-func downloadFile(fileName string, url string) (err error) {
+func DownloadFile(fileName string, url string) (err error) {
 	// Create blank file
 	file, err := os.Create(fileName)
 	if err != nil {
@@ -48,7 +50,7 @@ func downloadFile(fileName string, url string) (err error) {
 }
 
 //https://gist.github.com/paulerickson/6d8650947ee4e3f3dbcc28fde10eaae7
-func unzip(source, destination string) error {
+func Unzip(source, destination string) error {
 	archive, err := zip.OpenReader(source)
 	if err != nil {
 		return err
@@ -92,7 +94,7 @@ func unzip(source, destination string) error {
 	return nil
 }
 
-func getCwd() string {
+func GetCwd() string {
 	//get current working dir
 	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
 	if err != nil {
@@ -101,7 +103,7 @@ func getCwd() string {
 	return dir
 }
 
-func getLatestRelease() *Release {
+func GetLatestRelease() *Release {
 	//get the current release
 	resp, err := http.Get(CURRENT_RELEASE)
 	if err != nil {

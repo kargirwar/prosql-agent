@@ -8,9 +8,10 @@ import (
 	"os/exec"
 	"text/template"
 	"time"
+
+	utils "github.com/kargirwar/prosql-agent/release/utils"
 )
 
-const CURRENT_RELEASE = "https://raw.githubusercontent.com/kargirwar/prosql-agent/master/current-release.json"
 const RELEASE_ARCHIVE = "release.zip"
 const BINARY = "prosql-agent"
 const LABEL = "io.prosql.agent"
@@ -70,12 +71,12 @@ func main() {
 }
 
 func updateAgent() {
-	release := getLatestRelease()
+	release := utils.GetLatestRelease()
 
 	//Download and extract
 	fmt.Println("Updating to " + release.Version)
 	fmt.Printf("Downloading release ..")
-	downloadFile(RELEASE_ARCHIVE, release.Mac)
+	utils.DownloadFile(RELEASE_ARCHIVE, release.Mac)
 	fmt.Println("Done.")
 
 	fmt.Printf("Extracting files ..")
@@ -90,7 +91,7 @@ func updateAgent() {
 		log.Fatal(err)
 	}
 
-	unzip(RELEASE_ARCHIVE, dir)
+	utils.Unzip(RELEASE_ARCHIVE, dir)
 	fmt.Println("Done.")
 
 	//========================================================
@@ -131,7 +132,7 @@ func copyFrom(dir string) {
 	program := dir + "/prosql-agent/release/mac/" + BINARY
 
 	//copy executable to /usr/local/bin
-	cmd := exec.Command("cp", program, getCwd())
+	cmd := exec.Command("cp", program, utils.GetCwd())
 	err := cmd.Run()
 	if err != nil {
 		log.Fatal(err)
@@ -168,7 +169,7 @@ func startAgent() {
 
 func copyAgent() {
 	fmt.Println("Copying agent to /usr/local/bin ...")
-	program := getCwd() + "/prosql-agent"
+	program := utils.GetCwd() + "/prosql-agent"
 
 	//copy executable to /usr/local/bin
 	cmd := exec.Command("cp", "-v", program, "/usr/local/bin")
