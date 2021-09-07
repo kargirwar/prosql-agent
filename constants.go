@@ -21,7 +21,7 @@ package main
 import "time"
 
 const APP_NAME = "prosql-agent"
-const VERSION = "0.4"
+const VERSION = "0.6.1"
 const PORT = 23890
 
 //pool

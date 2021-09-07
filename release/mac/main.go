@@ -6,10 +6,12 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"text/template"
+	"time"
 )
 
+const CURRENT_RELEASE = "https://raw.githubusercontent.com/kargirwar/prosql-agent/master/current-release.json"
+const RELEASE_ARCHIVE = "release.zip"
 const BINARY = "prosql-agent"
 const LABEL = "io.prosql.agent"
 const PLIST = `<?xml version='1.0' encoding='UTF-8'?>
@@ -30,6 +32,7 @@ func main() {
 	var install = flag.Bool("install", false, "Install agent on your system")
 	var help = flag.Bool("help", false, "Show help message")
 	var uninstall = flag.Bool("uninstall", false, "Uninstall prosql-agent from your system")
+	var update = flag.Bool("update", false, "Update prosql-agent")
 	flag.Parse()
 
 	flag.Usage = func() {
@@ -49,17 +52,89 @@ func main() {
 	}
 
 	if *install {
-		copyAgent()
-		startAgent()
-		fmt.Println("Installed successfully! ")
+		installAgent()
+		fmt.Println("Installed successfully!")
 		return
 	}
 
 	if *uninstall {
-		delAgent()
-		stopAgent()
+		unInstallAgent()
 		fmt.Println("Done.")
 		return
+	}
+
+	if *update {
+		updateAgent()
+		fmt.Println("Updated successfully!")
+	}
+}
+
+func updateAgent() {
+	release := getLatestRelease()
+
+	//Download and extract
+	fmt.Println("Updating to " + release.Version)
+	fmt.Printf("Downloading release ..")
+	downloadFile(RELEASE_ARCHIVE, release.Mac)
+	fmt.Println("Done.")
+
+	fmt.Printf("Extracting files ..")
+	t := time.Now()
+	now := fmt.Sprintf("%d-%02d-%02dT%02d-%02d-%02d",
+		t.Year(), t.Month(), t.Day(),
+		t.Hour(), t.Minute(), t.Second())
+
+	dir := "temp-" + now
+	err := os.MkdirAll(dir, os.ModePerm)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	unzip(RELEASE_ARCHIVE, dir)
+	fmt.Println("Done.")
+
+	//========================================================
+	//Copy agent to current directory, uninstall current version
+	//and install updated version
+	copyFrom(dir)
+	unInstallAgent()
+	installAgent()
+	//========================================================
+
+	fmt.Printf("Cleaning up ..")
+	//delete temp files
+	err = os.RemoveAll(dir)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	//delete archive
+	err = os.Remove(RELEASE_ARCHIVE)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Done.")
+}
+
+func installAgent() {
+	copyAgent()
+	startAgent()
+}
+
+func unInstallAgent() {
+	delAgent()
+	stopAgent()
+}
+
+func copyFrom(dir string) {
+	program := dir + "/prosql-agent/release/mac/" + BINARY
+
+	//copy executable to /usr/local/bin
+	cmd := exec.Command("cp", program, getCwd())
+	err := cmd.Run()
+	if err != nil {
+		log.Fatal(err)
 	}
 }
 
@@ -91,22 +166,13 @@ func startAgent() {
 	}
 }
 
-func getCwd() string {
-	//get current working dir
-	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
-	if err != nil {
-		log.Fatal(err)
-	}
-	return dir
-}
-
 func copyAgent() {
 	fmt.Println("Copying agent to /usr/local/bin ...")
 	program := getCwd() + "/prosql-agent"
 
 	//copy executable to /usr/local/bin
-	cpCmd := exec.Command("cp", "-v", program, "/usr/local/bin")
-	err := cpCmd.Run()
+	cmd := exec.Command("cp", "-v", program, "/usr/local/bin")
+	err := cmd.Run()
 	if err != nil {
 		log.Fatal(err)
 	}
