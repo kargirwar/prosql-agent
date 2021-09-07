@@ -1,13 +1,15 @@
-package main
+// +build linux
+
+package adapter
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"text/template"
+
+	utils "github.com/kargirwar/prosql-agent/release/utils"
 )
 
 const UNIT = `
@@ -26,44 +28,7 @@ StandardError=syslog
 SyslogIdentifier=%n
 `
 
-func main() {
-	var install = flag.Bool("install", false, "Install prosql-agent on your system")
-	var help = flag.Bool("help", false, "Show help message")
-	var uninstall = flag.Bool("uninstall", false, "Uninstall prosql-agent from your system")
-	flag.Parse()
-
-	flag.Usage = func() {
-		w := flag.CommandLine.Output()
-		fmt.Fprintf(w, "prosqlctl usage:\n")
-		flag.PrintDefaults()
-	}
-
-	if *help {
-		flag.Usage()
-		return
-	}
-
-	if flag.NFlag() == 0 {
-		flag.Usage()
-		return
-	}
-
-	if *install {
-		copyAgent()
-		startAgent()
-		fmt.Println("Installed successfully! ")
-		return
-	}
-
-	if *uninstall {
-		delAgent()
-		stopAgent()
-		fmt.Println("Done.")
-		return
-	}
-}
-
-func startAgent() {
+func StartAgent() {
 	//create unit file and use systemctl to start agent
 	fmt.Println("Creating unit ...")
 	data := struct {
@@ -71,7 +36,7 @@ func startAgent() {
 		WorkingDir string
 	}{
 		Program:    "prosql-agent",
-		WorkingDir: getCwd(),
+		WorkingDir: utils.GetCwd(),
 	}
 
 	unit := fmt.Sprintf("/etc/systemd/system/prosql-agent.service")
@@ -105,18 +70,9 @@ func startAgent() {
 	}
 }
 
-func getCwd() string {
-	//get current working dir
-	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
-	if err != nil {
-		log.Fatal(err)
-	}
-	return dir
-}
-
-func copyAgent() {
+func CopyAgent() {
 	fmt.Println("Copying agent to /usr/local/bin ...")
-	program := getCwd() + "/prosql-agent"
+	program := utils.GetCwd() + "/prosql-agent"
 	//copy executable to /usr/local/bin
 	cpCmd := exec.Command("cp", program, "/usr/local/bin")
 	err := cpCmd.Run()
@@ -125,7 +81,7 @@ func copyAgent() {
 	}
 }
 
-func delAgent() {
+func DelAgent() {
 	fmt.Println("Deleting agent from /usr/local/bin ...")
 	//copy executable to /usr/local/bin
 	cmd := exec.Command("rm", "-f", "/usr/local/bin/prosql-agent")
@@ -137,7 +93,7 @@ func delAgent() {
 	}
 }
 
-func stopAgent() {
+func StopAgent() {
 	fmt.Println("Stopping agent ...")
 	cmd := exec.Command("systemctl", "stop", "prosql-agent.service")
 	err := cmd.Run()
@@ -154,4 +110,7 @@ func stopAgent() {
 		//can't do much about error here
 		log.Println(err)
 	}
+}
+
+func UpdateAgent() {
 }
