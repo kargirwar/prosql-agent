@@ -32,6 +32,7 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
+var VERSION = "VERSION"
 const LOG_FILE = "prosql.log"
 
 var logger *lumberjack.Logger
