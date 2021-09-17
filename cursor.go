@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -324,7 +325,7 @@ type res struct {
 }
 
 func getExportFile(ctx context.Context) (string, *os.File, error) {
-	home, err := os.UserHomeDir()
+	home, err := getHomeDir()
 	if err != nil {
 		home = ""
 	}
@@ -342,6 +343,13 @@ func getExportFile(ctx context.Context) (string, *os.File, error) {
 	}
 
 	return f, csvFile, nil
+}
+
+func getHomeDir() (string, error) {
+	if runtime.GOOS == "windows" {
+		return os.Getenv("USER_HOME_DIR"), nil
+	}
+	return os.UserHomeDir()
 }
 
 func fetchRows_ws(ctx context.Context, c *cursor, fetchReq FetchReq) error {
