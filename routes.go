@@ -42,6 +42,14 @@ type Response struct {
 	Eof       bool        `json:"eof"`
 }
 
+type QueryParams struct {
+	SessionId string
+	CursorId  string
+	Query     string
+	NumOfRows int
+	Export    bool
+}
+
 func getDsn(r *http.Request) (dsn string, err error) {
 	params := r.URL.Query()
 
@@ -142,33 +150,26 @@ func login(w http.ResponseWriter, r *http.Request) {
 	}{sid}, false)
 }
 
-//execute query and send results over ws
-func query_ws(w http.ResponseWriter, r *http.Request) {
+func cancel(w http.ResponseWriter, r *http.Request) {
 	ctx := getContext(r)
 	defer TimeTrack(ctx, time.Now())
-	ws, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Println(err)
-		Dbg(ctx, fmt.Sprintf("%s", err.Error()))
-		return
-	}
-	defer ws.Close()
 
-	sid, query, err := getQueryParams(r)
+	sid, cid, err := getCancelParams(r)
 
 	if err != nil {
 		Dbg(ctx, fmt.Sprintf("%s", err.Error()))
-		sendError_ws(ctx, ws, err, ERR_INVALID_USER_INPUT)
+		sendError(ctx, w, err, ERR_INVALID_USER_INPUT)
 		return
 	}
 
-	cid, err := Query(ctx, sid, query)
-	err = Fetch_ws(ctx, sid, cid, ws, BATCH_SIZE)
-
+	err = Cancel(ctx, sid, cid)
 	if err != nil {
-		sendError_ws(ctx, ws, err, ERR_INVALID_USER_INPUT)
+		Dbg(ctx, fmt.Sprintf("%s", err.Error()))
+		sendError(ctx, w, err, ERR_INVALID_USER_INPUT)
 		return
 	}
+
+	sendSuccess(r.Context(), w, nil, false)
 }
 
 //execute query and return its cursor id for later use
@@ -205,7 +206,7 @@ func execute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	n, err := Execute(r.Context(), sid, query)
+	cid, err := Execute(r.Context(), sid, query)
 
 	if err != nil {
 		sendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
@@ -213,8 +214,8 @@ func execute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sendSuccess(r.Context(), w, struct {
-		RowsAffected int64 `json:"rows-affected"`
-	}{n}, false)
+		CursorId string `json:"cursor-id"`
+	}{cid}, false)
 }
 
 func fetch(w http.ResponseWriter, r *http.Request) {
@@ -235,6 +236,33 @@ func fetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sendSuccess(r.Context(), w, rows, eof)
+}
+
+func fetch_ws(w http.ResponseWriter, r *http.Request) {
+	ctx := getContext(r)
+	defer TimeTrack(ctx, time.Now())
+
+	ws, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println(err)
+		Dbg(ctx, fmt.Sprintf("%s", err.Error()))
+		return
+	}
+	defer ws.Close()
+
+	params, err := getFetchParams_ws(r)
+
+	if err != nil {
+		sendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
+		return
+	}
+
+	err = Fetch_ws(ctx, params.SessionId, params.CursorId, ws, params.NumOfRows, params.Export)
+
+	if err != nil {
+		sendError_ws(ctx, ws, err, ERR_INVALID_USER_INPUT)
+		return
+	}
 }
 
 func getFetchParams(r *http.Request) (string, string, int, error) {
@@ -264,6 +292,66 @@ func getFetchParams(r *http.Request) (string, string, int, error) {
 		return "", "", -1, e
 	}
 	return sid[0], cid[0], n, nil
+}
+
+func getFetchParams_ws(r *http.Request) (*QueryParams, error) {
+	var params QueryParams
+	input := r.URL.Query()
+
+	sid, present := input["session-id"]
+	if !present || len(sid) == 0 {
+		e := errors.New("Session ID not provided")
+		return nil, e
+	}
+
+	params.SessionId = sid[0]
+
+	cid, present := input["cursor-id"]
+	if !present || len(sid) == 0 {
+		e := errors.New("Cursor ID not provided")
+		return nil, e
+	}
+
+	params.CursorId = cid[0]
+
+	num, present := input["num-of-rows"]
+	if !present || len(num) == 0 {
+		e := errors.New("Number of rows not provided")
+		return nil, e
+	}
+
+	n, err := strconv.Atoi(num[0])
+	if err != nil {
+		e := errors.New("Number of rows must be integer")
+		return nil, e
+	}
+
+	params.NumOfRows = n
+	//whether to export to file or not
+	_, present = input["export"]
+	if present {
+		params.Export = true
+	}
+
+	return &params, nil
+}
+
+func getCancelParams(r *http.Request) (string, string, error) {
+	params := r.URL.Query()
+
+	sid, present := params["session-id"]
+	if !present || len(sid) == 0 {
+		e := errors.New("Session ID not provided")
+		return "", "", e
+	}
+
+	cid, present := params["cursor-id"]
+	if !present || len(cid) == 0 {
+		e := errors.New("Cursor ID not provided")
+		return "", "", e
+	}
+
+	return sid[0], cid[0], nil
 }
 
 func getQueryParams(r *http.Request) (string, string, error) {

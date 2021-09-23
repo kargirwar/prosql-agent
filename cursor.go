@@ -19,8 +19,13 @@
 package main
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"os"
+	"runtime"
+	"path/filepath"
+	"strconv"
 	"time"
 
 	"context"
@@ -47,45 +52,49 @@ type cursor struct {
 	mutex      sync.Mutex
 	err        error
 	query      string
+	execute    bool
 }
 
-func (pc *cursor) start(ctx context.Context, s *session, query string) error {
+func (pc *cursor) start(ctx context.Context, s *session) error {
 	defer TimeTrack(ctx, time.Now())
 
 	pc.mutex.Lock()
 	defer pc.mutex.Unlock()
 
-	Dbg(ctx, "Starting query: "+query)
+	if pc.rows != nil {
+		Dbg(ctx, "Continue with current query")
+		return nil
+	}
 
-	rows, err := s.pool.QueryContext(pc.ctx, query)
+	Dbg(ctx, "Starting query: "+pc.query)
+
+	rows, err := s.pool.QueryContext(pc.ctx, pc.query)
 	if err != nil {
 		pc.err = err
 		return err
 	}
 
-	Dbg(ctx, "Done query: "+query)
+	Dbg(ctx, "Done query: "+pc.query)
 
 	pc.rows = rows
-	pc.query = query
-
 	return nil
 }
 
-func (pc *cursor) execute(ctx context.Context, s *session, query string) (int64, error) {
+func (pc *cursor) exec(ctx context.Context, s *session) (int64, error) {
 	defer TimeTrack(ctx, time.Now())
 
 	pc.mutex.Lock()
 	defer pc.mutex.Unlock()
 
-	Dbg(ctx, "Starting query: "+query)
+	Dbg(ctx, "Starting query: "+pc.query)
 
-	result, err := s.pool.ExecContext(pc.ctx, query)
+	result, err := s.pool.ExecContext(pc.ctx, pc.query)
 	if err != nil {
 		pc.err = err
 		return -1, err
 	}
 
-	Dbg(ctx, "Done query: "+query)
+	Dbg(ctx, "Done query: "+pc.query)
 
 	rows, err := result.RowsAffected()
 	if err != nil {
@@ -94,6 +103,20 @@ func (pc *cursor) execute(ctx context.Context, s *session, query string) (int64,
 	}
 
 	return rows, nil
+}
+
+func (pc *cursor) getId() string {
+	pc.mutex.Lock()
+	defer pc.mutex.Unlock()
+
+	return pc.id
+}
+
+func (pc *cursor) isExecute() bool {
+	pc.mutex.Lock()
+	defer pc.mutex.Unlock()
+
+	return pc.execute
 }
 
 func (pc *cursor) setAccessTime() {
@@ -177,18 +200,18 @@ func NewCursorStore() *cursors {
 //          cursor structs and methods end
 //==============================================================//
 
-func NewQueryCursor(reqCtx context.Context) *cursor {
-	c := createCursor(reqCtx)
+func NewQueryCursor(reqCtx context.Context, query string) *cursor {
+	c := createCursor(reqCtx, query, false)
 	go cursorHandler(reqCtx, c)
 	return c
 }
 
-func NewExecuteCursor(reqCtx context.Context) *cursor {
-	c := createCursor(reqCtx)
+func NewExecuteCursor(reqCtx context.Context, query string) *cursor {
+	c := createCursor(reqCtx, query, true)
 	return c
 }
 
-func createCursor(reqCtx context.Context) *cursor {
+func createCursor(reqCtx context.Context, query string, isExecute bool) *cursor {
 	var c cursor
 	ctx, cancel := context.WithCancel(context.Background())
 	c.id = uniuri.New()
@@ -197,6 +220,8 @@ func createCursor(reqCtx context.Context) *cursor {
 	c.accessTime = time.Now()
 	c.ctx = ctx
 	c.cancel = cancel
+	c.query = query
+	c.execute = isExecute
 
 	return &c
 }
@@ -209,9 +234,14 @@ loop:
 	for {
 		select {
 		case req := <-c.in:
-			c.setAccessTime()
+			ctx, cancel := context.WithCancel(req.ctx)
+			go startTimer(ctx, c)
+
 			res := handleCursorRequest(c, req)
 			c.out <- res
+
+			cancel()
+
 			if res.code == ERROR || res.code == EOF {
 				//Whatever the error we should exit
 				Dbg(req.ctx, fmt.Sprintf("%s: Shutting down cursorHandler due to %s\n", c.id, res.code))
@@ -230,10 +260,10 @@ func handleCursorRequest(c *cursor, req *Req) *Res {
 
 	switch req.code {
 	case CMD_FETCH_WS:
-		return fetch_ws(c, req)
+		return handle_ws(c, req)
 
 	case CMD_FETCH:
-		return fetch_ajax(c, req)
+		return handle_ajax(c, req)
 
 	default:
 		Dbg(req.ctx, fmt.Sprintf("%s: Invalid Command\n", c.id))
@@ -244,8 +274,8 @@ func handleCursorRequest(c *cursor, req *Req) *Res {
 	}
 }
 
-func fetch_ws(c *cursor, req *Req) *Res {
-	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_FETCH\n", c.id))
+func handle_ws(c *cursor, req *Req) *Res {
+	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_FETCH_WS\n", c.id))
 	fetchReq, _ := req.data.(FetchReq)
 	err := fetchRows_ws(req.ctx, c, fetchReq)
 	if err != nil {
@@ -263,7 +293,7 @@ func fetch_ws(c *cursor, req *Req) *Res {
 	}
 }
 
-func fetch_ajax(c *cursor, req *Req) *Res {
+func handle_ajax(c *cursor, req *Req) *Res {
 	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_FETCH\n", c.id))
 	fetchReq, _ := req.data.(FetchReq)
 	rows, err := fetchRows(req.ctx, c, fetchReq)
@@ -294,21 +324,73 @@ type res struct {
 	K []string `json:"k"`
 }
 
+func getExportFile(ctx context.Context) (string, *os.File, error) {
+	home, err := getHomeDir()
+	if err != nil {
+		home = ""
+	}
+	t := time.Now()
+	now := fmt.Sprintf("%d-%02d-%02dT%02d-%02d-%02d",
+		t.Year(), t.Month(), t.Day(),
+		t.Hour(), t.Minute(), t.Second())
+
+	f := filepath.FromSlash(home + "/Downloads/" + "query-results-" + now + ".csv")
+	csvFile, err := os.Create(f)
+
+	if err != nil {
+		Dbg(ctx, fmt.Sprintf("failed creating file: %s", err))
+		return "", nil, err
+	}
+
+	return f, csvFile, nil
+}
+
+func getHomeDir() (string, error) {
+	if runtime.GOOS == "windows" {
+		return os.Getenv("USER_HOME_DIR"), nil
+	}
+	return os.UserHomeDir()
+}
+
 func fetchRows_ws(ctx context.Context, c *cursor, fetchReq FetchReq) error {
 	if fetchReq.cid != c.id {
 		return errors.New(ERR_INVALID_CURSOR_ID)
 	}
-
-	ws := fetchReq.ws
 
 	cols, err := c.rows.Columns()
 	if err != nil {
 		return err
 	}
 
-	vals := make([]interface{}, len(cols))
+	//if results are to be exported, create the output file
+	var csvWriter *csv.Writer
+	var fileName string
+	var csvFile *os.File
+
+	if fetchReq.export {
+		fileName, csvFile, err = getExportFile(ctx)
+
+		if err != nil {
+			Dbg(ctx, fmt.Sprintf("failed creating file: %s", err))
+			return err
+		}
+
+		csvWriter = csv.NewWriter(csvFile)
+
+		if err := csvWriter.Write(cols); err != nil {
+			Dbg(ctx, fmt.Sprintf("error writing record to csv: %s", err))
+		}
+
+		defer func() {
+			csvWriter.Flush()
+			csvFile.Close()
+		}()
+	}
 
 	n := 0
+	ws := fetchReq.ws
+	vals := make([]interface{}, len(cols))
+
 	for c.rows.Next() {
 		for i := range cols {
 			vals[i] = &vals[i]
@@ -335,8 +417,7 @@ func fetchRows_ws(ctx context.Context, c *cursor, fetchReq FetchReq) error {
 			r = append(r, v)
 		}
 
-		str, _ := json.Marshal(&res{K: r})
-		err = ws.WriteMessage(websocket.TextMessage, []byte(str))
+		err = processRow(ctx, c.id, r, (n + 1), ws, fileName, csvWriter, fetchReq.export)
 		if err != nil {
 			return err
 		}
@@ -345,14 +426,66 @@ func fetchRows_ws(ctx context.Context, c *cursor, fetchReq FetchReq) error {
 		if n == fetchReq.n {
 			break
 		}
+
+		//time.Sleep(500 * time.Millisecond)
 	}
 
 	if c.rows.Err() != nil {
 		return c.rows.Err()
 	}
 
+	if n < 1000 && fetchReq.export {
+		str, _ := json.Marshal(&res{K: []string{"current-row", strconv.Itoa(n)}})
+		err := ws.WriteMessage(websocket.TextMessage, []byte(str))
+		if err != nil {
+			return err
+		}
+	}
+
 	str, _ := json.Marshal(&res{K: []string{"eos"}})
 	err = ws.WriteMessage(websocket.TextMessage, []byte(str))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func processRow(ctx context.Context, cursorId string, row []string, currRow int,
+	ws *websocket.Conn, fileName string, csvWriter *csv.Writer, export bool) error {
+
+	if export {
+		var r []string
+		for i := 1; i <= len(row); i += 2 {
+			r = append(r, row[i])
+		}
+
+		if err := csvWriter.Write(r); err != nil {
+			Dbg(ctx, fmt.Sprintf("error writing record to csv: %s", err))
+			return err
+		}
+
+		if currRow == 1 {
+			str, _ := json.Marshal(&res{K: []string{"header", cursorId, fileName}})
+			err := ws.WriteMessage(websocket.TextMessage, []byte(str))
+			if err != nil {
+				return err
+			}
+		}
+
+		if currRow%1000 == 0 {
+			str, _ := json.Marshal(&res{K: []string{"current-row", strconv.Itoa(currRow)}})
+			err := ws.WriteMessage(websocket.TextMessage, []byte(str))
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}
+
+	str, _ := json.Marshal(&res{K: row})
+	err := ws.WriteMessage(websocket.TextMessage, []byte(str))
 	if err != nil {
 		return err
 	}

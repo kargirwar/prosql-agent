@@ -163,8 +163,7 @@ func handleQuery(s *session, req *Req) {
 	query, _ := req.data.(string)
 	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_QUERY for: %s\n", s.id, query))
 
-	c := NewQueryCursor(req.ctx)
-	c.start(req.ctx, s, query)
+	c := NewQueryCursor(req.ctx, query)
 	s.cursorStore.set(c.id, c)
 
 	Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_QUERY for: %s\n", s.id, query))
@@ -183,22 +182,14 @@ func handleExecute(s *session, req *Req) {
 	query, _ := req.data.(string)
 	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_EXECUTE for: %s\n", s.id, query))
 
-	c := NewExecuteCursor(req.ctx)
-	n, err := c.execute(req.ctx, s, query)
-
-	if err != nil {
-		req.resChan <- &Res{
-			code: ERROR,
-			data: err,
-		}
-		return
-	}
+	c := NewExecuteCursor(req.ctx, query)
+	s.cursorStore.set(c.id, c)
 
 	Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_EXECUTE for: %s\n", s.id, query))
 
 	req.resChan <- &Res{
 		code: SUCCESS,
-		data: n,
+		data: c.id,
 	}
 
 	Dbg(req.ctx, fmt.Sprintf("%s: Sent Response CMD_EXECUTE for: %s\n", s.id, query))
@@ -217,13 +208,31 @@ func handleFetch_ws(s *session, req *Req) {
 		return
 	}
 
+	err = c.start(req.ctx, s)
+
+	if err != nil {
+		req.resChan <- &Res{
+			code: ERROR,
+			data: err,
+		}
+		return
+	}
+
 	Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_FETCH_WS for: %s\n", s.id, c.id))
+
+	//star a timer which will keep updating accesstime, so that
+	//it does not get cleaned up. This is useful for long running queries
+	ctx, cancel := context.WithCancel(req.ctx)
+	go startTimer(ctx, s)
 
 	//send fetch request to cursor
 	c.in <- req
 	res := <-c.out
 
-	//Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_FETCH for: %s with code: %s\n", s.id, c.id, res.code))
+	//stop accesstimer
+	cancel()
+
+	Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_FETCH_WS for: %s with code: %s\n", s.id, c.id, res.code))
 	if res.code == ERROR || res.code == EOF {
 		Dbg(req.ctx, fmt.Sprintf("%s: clearing cursor %s\n", s.id, c.id))
 		s.cursorStore.clear(c.id)
@@ -235,6 +244,49 @@ func handleFetch(s *session, req *Req) {
 	//just pass on to appropriate cursor and wait for results
 	fetchReq, _ := req.data.(FetchReq)
 	c, err := s.cursorStore.get(fetchReq.cid)
+
+	if err != nil {
+		req.resChan <- &Res{
+			code: ERROR,
+			data: err,
+		}
+		return
+	}
+
+	if c.isExecute() {
+		//debug
+		//time.Sleep(10 * time.Second)
+		//if this is execute type return result immediately
+		n, err := c.exec(req.ctx, s)
+
+		if err != nil {
+			req.resChan <- &Res{
+				code: ERROR,
+				data: err,
+			}
+			s.cursorStore.clear(c.id)
+			return
+		}
+
+		Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_FETCH for: %s\n", c.id))
+
+		var results [][]string
+		r := []string{"rows-affected", fmt.Sprintf("%d", n)}
+		results = append(results, r)
+
+		req.resChan <- &Res{
+			code: SUCCESS,
+			data: &results,
+		}
+
+		s.cursorStore.clear(c.id)
+
+		Dbg(req.ctx, fmt.Sprintf("%s: Sent Response CMD_FETCH for: %s\n", c.id))
+		return
+	}
+
+	//otherwise let cursorhandler take care of this
+	err = c.start(req.ctx, s)
 
 	if err != nil {
 		req.resChan <- &Res{

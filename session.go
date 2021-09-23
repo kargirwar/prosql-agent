@@ -51,6 +51,13 @@ type session struct {
 	mutex       sync.Mutex
 }
 
+func (ps *session) getId() string {
+	ps.mutex.Lock()
+	defer ps.mutex.Unlock()
+
+	return ps.id
+}
+
 func (ps *session) setAccessTime() {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
@@ -142,9 +149,10 @@ type Res struct {
 }
 
 type FetchReq struct {
-	cid string
-	n   int
-	ws  *websocket.Conn
+	cid    string
+	n      int
+	ws     *websocket.Conn
+	export bool
 }
 
 //==============================================================//
@@ -274,7 +282,7 @@ func Query(ctx context.Context, sid string, query string) (string, error) {
 
 //fetch n rows from session sid using cursor cid. The cursor will directly
 //send data on websocket channel ws
-func Fetch_ws(ctx context.Context, sid string, cid string, ws *websocket.Conn, n int) error {
+func Fetch_ws(ctx context.Context, sid string, cid string, ws *websocket.Conn, n int, export bool) error {
 	defer TimeTrack(ctx, time.Now())
 
 	s, err := sessionStore.get(sid)
@@ -287,9 +295,10 @@ func Fetch_ws(ctx context.Context, sid string, cid string, ws *websocket.Conn, n
 		ctx:  ctx,
 		code: CMD_FETCH_WS,
 		data: FetchReq{
-			cid: cid,
-			n:   n,
-			ws:  ws,
+			cid:    cid,
+			n:      n,
+			ws:     ws,
+			export: export,
 		},
 		resChan: ch,
 	}
@@ -339,12 +348,12 @@ func Fetch(ctx context.Context, sid string, cid string, n int) (*[][]string, boo
 	return res.data.(*[][]string), eof, nil
 }
 
-func Execute(ctx context.Context, sid string, query string) (int64, error) {
+func Execute(ctx context.Context, sid string, query string) (string, error) {
 	defer TimeTrack(ctx, time.Now())
 
 	s, err := sessionStore.get(sid)
 	if err != nil {
-		return -1, err
+		return "", err
 	}
 
 	Dbg(ctx, fmt.Sprintf("%s", s))
@@ -361,12 +370,8 @@ func Execute(ctx context.Context, sid string, query string) (int64, error) {
 	Dbg(ctx, fmt.Sprintf("%s Send CMD_EXECUTE for %s", s.id, query))
 
 	res := <-ch
-	if res.code == ERROR {
-		return -1, res.data.(error)
-	}
-
 	Dbg(ctx, fmt.Sprintf("%s Received Response for %s", s.id, query))
-	return res.data.(int64), nil
+	return res.data.(string), nil
 }
 
 //cancel a running query
@@ -411,16 +416,6 @@ func createSession(ctx context.Context, dbtype string, dsn string) (*session, er
 		return nil, err
 	}
 
-	//hack. Have n idle connections ready
-	//for i := 0; i < MAX_IDLE_CONNS_AT_START; i++ {
-	//rows, err := pool.QueryContext(ctx1, "select 1")
-	//if err != nil {
-	//return nil, err
-	//}
-	//
-	//rows.Close()
-	//}
-	//
 	var s session
 	s.pool = pool
 	s.accessTime = time.Now()
