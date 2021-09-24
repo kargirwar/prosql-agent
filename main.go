@@ -22,6 +22,7 @@ import (
 	_ "fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"time"
@@ -33,6 +34,7 @@ import (
 )
 
 var VERSION = "VERSION"
+
 const LOG_FILE = "prosql.log"
 
 var logger *lumberjack.Logger
@@ -55,14 +57,20 @@ func init() {
 }
 
 func getLogFileName() string {
-	//Linux
-	if runtime.GOOS == "linux" {
-		return "/var/log/prosql-agent/" + LOG_FILE
-	}
 
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return LOG_FILE
+	}
+
+	//Linux
+	if runtime.GOOS == "linux" {
+		path := home + "/.prosql-agent"
+		err := os.MkdirAll(path, 0700)
+		if err != nil {
+			return LOG_FILE
+		}
+		return filepath.Join(path, LOG_FILE)
 	}
 
 	//OSX
