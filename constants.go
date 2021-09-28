@@ -20,6 +20,10 @@ package main
 
 import "time"
 
+//build options
+var VERSION = "VERSION"
+var OS = "OS"
+
 const APP_NAME = "prosql-agent"
 const PORT = 23890
 

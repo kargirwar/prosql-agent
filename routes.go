@@ -99,7 +99,8 @@ func about(w http.ResponseWriter, r *http.Request) {
 	sendSuccess(r.Context(), w, struct {
 		ID      string `json:"device-id"`
 		Version string `json:"version"`
-	}{id, VERSION}, false)
+		OS      string `json:"os"`
+	}{id, VERSION, OS}, false)
 }
 
 func ping(w http.ResponseWriter, r *http.Request) {
