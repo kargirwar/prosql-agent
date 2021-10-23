@@ -32,15 +32,8 @@ import (
 
 	"github.com/denisbrodbeck/machineid"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/kargirwar/prosql-agent/utils"
 )
-
-type Response struct {
-	Status    string      `json:"status"`
-	Msg       string      `json:"msg"`
-	ErrorCode string      `json:"error-code"`
-	Data      interface{} `json:"data"`
-	Eof       bool        `json:"eof"`
-}
 
 type QueryParams struct {
 	SessionId string
@@ -87,16 +80,16 @@ func getDsn(r *http.Request) (dsn string, err error) {
 }
 
 func about(w http.ResponseWriter, r *http.Request) {
-	defer TimeTrack(r.Context(), time.Now())
+	defer utils.TimeTrack(r.Context(), time.Now())
 
 	id, err := machineid.ProtectedID(APP_NAME)
 	if err != nil {
 		id = "not-available"
 	}
 
-	Dbg(r.Context(), "device-id:"+id)
+	utils.Dbg(r.Context(), "device-id:"+id)
 
-	sendSuccess(r.Context(), w, struct {
+	utils.SendSuccess(r.Context(), w, struct {
 		ID      string `json:"device-id"`
 		Version string `json:"version"`
 		OS      string `json:"os"`
@@ -104,18 +97,18 @@ func about(w http.ResponseWriter, r *http.Request) {
 }
 
 func ping(w http.ResponseWriter, r *http.Request) {
-	defer TimeTrack(r.Context(), time.Now())
+	defer utils.TimeTrack(r.Context(), time.Now())
 
 	dsn, err := getDsn(r)
 	if err != nil {
-		sendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
+		utils.SendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
 		return
 	}
 
 	var pool *sql.DB // Database connection pool.
 	pool, err = sql.Open("mysql", dsn)
 	if err != nil {
-		sendError(r.Context(), w, err, ERR_DB_ERROR)
+		utils.SendError(r.Context(), w, err, ERR_DB_ERROR)
 		return
 	}
 	defer pool.Close()
@@ -124,129 +117,129 @@ func ping(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if err := pool.PingContext(ctx); err != nil {
-		sendError(r.Context(), w, err, ERR_DB_ERROR)
+		utils.SendError(r.Context(), w, err, ERR_DB_ERROR)
 		return
 	}
 
-	sendSuccess(r.Context(), w, nil, false)
+	utils.SendSuccess(r.Context(), w, nil, false)
 }
 
 func login(w http.ResponseWriter, r *http.Request) {
-	defer TimeTrack(r.Context(), time.Now())
+	defer utils.TimeTrack(r.Context(), time.Now())
 
 	dsn, err := getDsn(r)
 	if err != nil {
-		sendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
+		utils.SendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
 		return
 	}
 
 	sid, err := NewSession(r.Context(), "mysql", dsn)
 	if err != nil {
-		sendError(r.Context(), w, err, ERR_DB_ERROR)
+		utils.SendError(r.Context(), w, err, ERR_DB_ERROR)
 		return
 	}
 
-	sendSuccess(r.Context(), w, struct {
+	utils.SendSuccess(r.Context(), w, struct {
 		SessionId string `json:"session-id"`
 	}{sid}, false)
 }
 
 func cancel(w http.ResponseWriter, r *http.Request) {
-	ctx := getContext(r)
-	defer TimeTrack(ctx, time.Now())
+	ctx := utils.GetContext(r)
+	defer utils.TimeTrack(ctx, time.Now())
 
 	sid, cid, err := getCancelParams(r)
 
 	if err != nil {
-		Dbg(ctx, fmt.Sprintf("%s", err.Error()))
-		sendError(ctx, w, err, ERR_INVALID_USER_INPUT)
+		utils.Dbg(ctx, fmt.Sprintf("%s", err.Error()))
+		utils.SendError(ctx, w, err, ERR_INVALID_USER_INPUT)
 		return
 	}
 
 	err = Cancel(ctx, sid, cid)
 	if err != nil {
-		Dbg(ctx, fmt.Sprintf("%s", err.Error()))
-		sendError(ctx, w, err, ERR_INVALID_USER_INPUT)
+		utils.Dbg(ctx, fmt.Sprintf("%s", err.Error()))
+		utils.SendError(ctx, w, err, ERR_INVALID_USER_INPUT)
 		return
 	}
 
-	sendSuccess(r.Context(), w, nil, false)
+	utils.SendSuccess(r.Context(), w, nil, false)
 }
 
 //execute query and return its cursor id for later use
 func query(w http.ResponseWriter, r *http.Request) {
-	defer TimeTrack(r.Context(), time.Now())
+	defer utils.TimeTrack(r.Context(), time.Now())
 
 	sid, query, err := getQueryParams(r)
 
 	if err != nil {
-		sendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
+		utils.SendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
 		return
 	}
 
 	cid, err := Query(r.Context(), sid, query)
 
 	if err != nil {
-		sendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
+		utils.SendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
 		return
 	}
 
-	sendSuccess(r.Context(), w, struct {
+	utils.SendSuccess(r.Context(), w, struct {
 		CursorId string `json:"cursor-id"`
 	}{cid}, false)
 }
 
 //execute query and return results
 func execute(w http.ResponseWriter, r *http.Request) {
-	defer TimeTrack(r.Context(), time.Now())
+	defer utils.TimeTrack(r.Context(), time.Now())
 
 	sid, query, err := getQueryParams(r)
 
 	if err != nil {
-		sendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
+		utils.SendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
 		return
 	}
 
 	cid, err := Execute(r.Context(), sid, query)
 
 	if err != nil {
-		sendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
+		utils.SendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
 		return
 	}
 
-	sendSuccess(r.Context(), w, struct {
+	utils.SendSuccess(r.Context(), w, struct {
 		CursorId string `json:"cursor-id"`
 	}{cid}, false)
 }
 
 func fetch(w http.ResponseWriter, r *http.Request) {
-	defer TimeTrack(r.Context(), time.Now())
+	defer utils.TimeTrack(r.Context(), time.Now())
 
 	sid, cid, n, err := getFetchParams(r)
 
 	if err != nil {
-		sendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
+		utils.SendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
 		return
 	}
 
 	rows, eof, err := Fetch(r.Context(), sid, cid, n)
 
 	if err != nil {
-		sendError(r.Context(), w, err, ERR_DB_ERROR)
+		utils.SendError(r.Context(), w, err, ERR_DB_ERROR)
 		return
 	}
 
-	sendSuccess(r.Context(), w, rows, eof)
+	utils.SendSuccess(r.Context(), w, rows, eof)
 }
 
 func fetch_ws(w http.ResponseWriter, r *http.Request) {
-	ctx := getContext(r)
-	defer TimeTrack(ctx, time.Now())
+	ctx := utils.GetContext(r)
+	defer utils.TimeTrack(ctx, time.Now())
 
-	ws, err := upgrader.Upgrade(w, r, nil)
+	ws, err := utils.Upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
-		Dbg(ctx, fmt.Sprintf("%s", err.Error()))
+		utils.Dbg(ctx, fmt.Sprintf("%s", err.Error()))
 		return
 	}
 	defer ws.Close()
@@ -254,14 +247,14 @@ func fetch_ws(w http.ResponseWriter, r *http.Request) {
 	params, err := getFetchParams_ws(r)
 
 	if err != nil {
-		sendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
+		utils.SendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
 		return
 	}
 
 	err = Fetch_ws(ctx, params.SessionId, params.CursorId, ws, params.NumOfRows, params.Export)
 
 	if err != nil {
-		sendError_ws(ctx, ws, err, ERR_INVALID_USER_INPUT)
+		utils.SendError_ws(ctx, ws, err, ERR_INVALID_USER_INPUT)
 		return
 	}
 }

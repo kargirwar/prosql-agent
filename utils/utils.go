@@ -16,7 +16,7 @@
    along with prosql-agent.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-package main
+package utils
 
 import (
 	"context"
@@ -33,7 +33,17 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var upgrader = websocket.Upgrader{
+const ERR_UNRECOVERABLE = "unrecoverable-error"
+
+type Response struct {
+	Status    string      `json:"status"`
+	Msg       string      `json:"msg"`
+	ErrorCode string      `json:"error-code"`
+	Data      interface{} `json:"data"`
+	Eof       bool        `json:"eof"`
+}
+
+var Upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		//todo: enforce some rules here
 		return true
@@ -82,7 +92,7 @@ func Dbg(ctx context.Context, v string) {
 }
 
 func echo(w http.ResponseWriter, r *http.Request) {
-	c, err := upgrader.Upgrade(w, r, nil)
+	c, err := Upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Print("upgrade:", err)
 		return
@@ -103,49 +113,7 @@ func echo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func sessionDumper(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		keys := sessionStore.getKeys()
-		Dbg(r.Context(), fmt.Sprintf("Found :%d sessions", len(keys)))
-
-		for _, sk := range keys {
-			Dbg(r.Context(), fmt.Sprintf("s: %s\n", sk))
-			s, _ := sessionStore.get(sk)
-			if s == nil {
-				Dbg(r.Context(), fmt.Sprintf("session "+sk+" is nil"))
-				continue
-			}
-			ckeys := s.cursorStore.getKeys()
-			for _, ck := range ckeys {
-				c, _ := s.cursorStore.get(ck)
-				if c == nil {
-					Dbg(r.Context(), fmt.Sprintf("cursor "+ck+" is nil"))
-					continue
-				}
-
-				Dbg(r.Context(), fmt.Sprintf("    c: %s query: %s\n", ck, c.query))
-			}
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func mw(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		w.Header().Set("Access-Control-Allow-Headers", "X-Request-ID")
-		w.Header().Set("Content-Type", "application/json")
-
-		if r.Method == http.MethodOptions {
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func sendError_ws(ctx context.Context, c *websocket.Conn, err error, code string) {
+func SendError_ws(ctx context.Context, c *websocket.Conn, err error, code string) {
 	defer TimeTrack(ctx, time.Now())
 
 	res := &Response{
@@ -157,7 +125,7 @@ func sendError_ws(ctx context.Context, c *websocket.Conn, err error, code string
 	c.WriteMessage(websocket.TextMessage, str)
 }
 
-func sendError(ctx context.Context, w http.ResponseWriter, err error, code string) {
+func SendError(ctx context.Context, w http.ResponseWriter, err error, code string) {
 	defer TimeTrack(ctx, time.Now())
 
 	res := &Response{
@@ -169,7 +137,7 @@ func sendError(ctx context.Context, w http.ResponseWriter, err error, code strin
 	fmt.Fprintf(w, string(str))
 }
 
-func sendSuccess(ctx context.Context, w http.ResponseWriter, data interface{}, eof bool) {
+func SendSuccess(ctx context.Context, w http.ResponseWriter, data interface{}, eof bool) {
 	defer TimeTrack(ctx, time.Now())
 
 	res := &Response{
@@ -180,7 +148,7 @@ func sendSuccess(ctx context.Context, w http.ResponseWriter, data interface{}, e
 	str, err := json.Marshal(res)
 	if err != nil {
 		e := errors.New("Unrecoverable error")
-		sendError(ctx, w, e, ERR_UNRECOVERABLE)
+		SendError(ctx, w, e, ERR_UNRECOVERABLE)
 		return
 	}
 	fmt.Fprint(w, string(str))
@@ -189,7 +157,7 @@ func sendSuccess(ctx context.Context, w http.ResponseWriter, data interface{}, e
 type requestIDKey struct{}
 
 //https://stackoverflow.com/a/67388007/1926351
-func requestIDSetter(next http.Handler) http.Handler {
+func RequestIDSetter(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reqID := r.Header.Get("X-Request-ID")
 		ctx := context.WithValue(r.Context(), requestIDKey{}, reqID)
@@ -207,7 +175,7 @@ func reqId(ctx context.Context) string {
 	return "req-id"
 }
 
-func getContext(r *http.Request) context.Context {
+func GetContext(r *http.Request) context.Context {
 	params := r.URL.Query()
 
 	reqId, present := params["req-id"]

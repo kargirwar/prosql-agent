@@ -29,6 +29,7 @@ import (
 
 	"github.com/gorilla/mux"
 	_ "github.com/gorilla/websocket"
+	"github.com/kargirwar/prosql-agent/utils"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
@@ -85,7 +86,7 @@ func main() {
 
 	//middleware
 	r.Use(mw)
-	r.Use(requestIDSetter)
+	r.Use(utils.RequestIDSetter)
 	r.Use(sessionDumper)
 
 	//routes
@@ -106,4 +107,19 @@ func main() {
 		log.Fatal(err.Error())
 		os.Exit(-1)
 	}
+}
+
+func mw(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Allow-Headers", "X-Request-ID")
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.Method == http.MethodOptions {
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }

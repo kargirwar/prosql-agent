@@ -30,12 +30,14 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
 	"github.com/dchest/uniuri"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/websocket"
+	"github.com/kargirwar/prosql-agent/utils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -235,7 +237,7 @@ func cleanupSessions() {
 //==============================================================//
 
 func NewSession(ctx context.Context, dbtype string, dsn string) (string, error) {
-	defer TimeTrack(ctx, time.Now())
+	defer utils.TimeTrack(ctx, time.Now())
 
 	s, err := createSession(ctx, dbtype, dsn)
 	if err != nil {
@@ -251,14 +253,14 @@ func NewSession(ctx context.Context, dbtype string, dsn string) (string, error) 
 //execute a query and create a cursor for the results
 //results must be retrieved by calling fetch later with the cursor id
 func Query(ctx context.Context, sid string, query string) (string, error) {
-	defer TimeTrack(ctx, time.Now())
+	defer utils.TimeTrack(ctx, time.Now())
 
 	s, err := sessionStore.get(sid)
 	if err != nil {
 		return "", err
 	}
 
-	Dbg(ctx, fmt.Sprintf("%s", s))
+	utils.Dbg(ctx, fmt.Sprintf("%s", s))
 
 	//we ask the session handler to create a new cursor and return its id
 	ch := make(chan *Res)
@@ -269,21 +271,21 @@ func Query(ctx context.Context, sid string, query string) (string, error) {
 		resChan: ch,
 	}
 
-	Dbg(ctx, fmt.Sprintf("%s Send CMD_QUERY for %s", s.id, query))
+	utils.Dbg(ctx, fmt.Sprintf("%s Send CMD_QUERY for %s", s.id, query))
 
 	res := <-ch
 	if res.code == ERROR {
 		return "", res.data.(error)
 	}
 
-	Dbg(ctx, fmt.Sprintf("%s Received Response for %s", s.id, query))
+	utils.Dbg(ctx, fmt.Sprintf("%s Received Response for %s", s.id, query))
 	return res.data.(string), nil
 }
 
 //fetch n rows from session sid using cursor cid. The cursor will directly
 //send data on websocket channel ws
 func Fetch_ws(ctx context.Context, sid string, cid string, ws *websocket.Conn, n int, export bool) error {
-	defer TimeTrack(ctx, time.Now())
+	defer utils.TimeTrack(ctx, time.Now())
 
 	s, err := sessionStore.get(sid)
 	if err != nil {
@@ -304,7 +306,7 @@ func Fetch_ws(ctx context.Context, sid string, cid string, ws *websocket.Conn, n
 	}
 
 	res := <-ch
-	Dbg(ctx, fmt.Sprintf("FETCH s: %s c: %s code %s\n", s.id, cid, res.code))
+	utils.Dbg(ctx, fmt.Sprintf("FETCH s: %s c: %s code %s\n", s.id, cid, res.code))
 
 	if res.code == ERROR {
 		return res.data.(error)
@@ -315,7 +317,7 @@ func Fetch_ws(ctx context.Context, sid string, cid string, ws *websocket.Conn, n
 
 //fetch n rows from session sid using cursor cid
 func Fetch(ctx context.Context, sid string, cid string, n int) (*[][]string, bool, error) {
-	defer TimeTrack(ctx, time.Now())
+	defer utils.TimeTrack(ctx, time.Now())
 
 	s, err := sessionStore.get(sid)
 	if err != nil {
@@ -334,7 +336,7 @@ func Fetch(ctx context.Context, sid string, cid string, n int) (*[][]string, boo
 	}
 
 	res := <-ch
-	Dbg(ctx, fmt.Sprintf("FETCH s: %s c: %s code %s\n", s.id, cid, res.code))
+	utils.Dbg(ctx, fmt.Sprintf("FETCH s: %s c: %s code %s\n", s.id, cid, res.code))
 
 	if res.code == ERROR {
 		return nil, false, res.data.(error)
@@ -349,14 +351,14 @@ func Fetch(ctx context.Context, sid string, cid string, n int) (*[][]string, boo
 }
 
 func Execute(ctx context.Context, sid string, query string) (string, error) {
-	defer TimeTrack(ctx, time.Now())
+	defer utils.TimeTrack(ctx, time.Now())
 
 	s, err := sessionStore.get(sid)
 	if err != nil {
 		return "", err
 	}
 
-	Dbg(ctx, fmt.Sprintf("%s", s))
+	utils.Dbg(ctx, fmt.Sprintf("%s", s))
 
 	//we ask the session handler to create a new cursor and return its id
 	ch := make(chan *Res)
@@ -367,16 +369,16 @@ func Execute(ctx context.Context, sid string, query string) (string, error) {
 		resChan: ch,
 	}
 
-	Dbg(ctx, fmt.Sprintf("%s Send CMD_EXECUTE for %s", s.id, query))
+	utils.Dbg(ctx, fmt.Sprintf("%s Send CMD_EXECUTE for %s", s.id, query))
 
 	res := <-ch
-	Dbg(ctx, fmt.Sprintf("%s Received Response for %s", s.id, query))
+	utils.Dbg(ctx, fmt.Sprintf("%s Received Response for %s", s.id, query))
 	return res.data.(string), nil
 }
 
 //cancel a running query
 func Cancel(ctx context.Context, sid string, cid string) error {
-	defer TimeTrack(ctx, time.Now())
+	defer utils.TimeTrack(ctx, time.Now())
 
 	s, err := sessionStore.get(sid)
 	if err != nil {
@@ -398,7 +400,7 @@ func Cancel(ctx context.Context, sid string, cid string) error {
 //==============================================================//
 
 func createSession(ctx context.Context, dbtype string, dsn string) (*session, error) {
-	defer TimeTrack(ctx, time.Now())
+	defer utils.TimeTrack(ctx, time.Now())
 
 	pool, err := sql.Open(dbtype, dsn)
 
@@ -424,4 +426,31 @@ func createSession(ctx context.Context, dbtype string, dsn string) (*session, er
 	s.cursorStore = NewCursorStore()
 
 	return &s, nil
+}
+
+func sessionDumper(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		keys := sessionStore.getKeys()
+		utils.Dbg(r.Context(), fmt.Sprintf("Found :%d sessions", len(keys)))
+
+		for _, sk := range keys {
+			utils.Dbg(r.Context(), fmt.Sprintf("s: %s\n", sk))
+			s, _ := sessionStore.get(sk)
+			if s == nil {
+				utils.Dbg(r.Context(), fmt.Sprintf("session "+sk+" is nil"))
+				continue
+			}
+			ckeys := s.cursorStore.getKeys()
+			for _, ck := range ckeys {
+				c, _ := s.cursorStore.get(ck)
+				if c == nil {
+					utils.Dbg(r.Context(), fmt.Sprintf("cursor "+ck+" is nil"))
+					continue
+				}
+
+				utils.Dbg(r.Context(), fmt.Sprintf("    c: %s query: %s\n", ck, c.query))
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
