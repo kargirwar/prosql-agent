@@ -16,7 +16,7 @@
    along with prosql-agent.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-package main
+package constants
 
 import "time"
 

@@ -37,6 +37,7 @@ import (
 	"github.com/dchest/uniuri"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/websocket"
+	"github.com/kargirwar/prosql-agent/constants"
 	"github.com/kargirwar/prosql-agent/utils"
 	log "github.com/sirupsen/logrus"
 )
@@ -102,7 +103,7 @@ func (ps *sessions) get(sid string) (*session, error) {
 
 	s, present := ps.store[sid]
 	if !present {
-		return nil, errors.New(ERR_INVALID_SESSION_ID)
+		return nil, errors.New(constants.ERR_INVALID_SESSION_ID)
 	}
 
 	return s, nil
@@ -168,11 +169,11 @@ func init() {
 	sessionStore = &sessions{
 		store: store,
 	}
-	ticker = time.NewTicker(SESSION_CLEANUP_INTERVAL)
+	ticker = time.NewTicker(constants.SESSION_CLEANUP_INTERVAL)
 	go cleanupSessions()
 }
 
-//for all sessions whose accesstime is older than SESSION_CLEANUP_INTERVAL,
+//for all sessions whose accesstime is older than constants.SESSION_CLEANUP_INTERVAL,
 //clean up active cursors if any and then delete the session itself
 func cleanupSessions() {
 	for {
@@ -194,7 +195,7 @@ func cleanupSessions() {
 				}
 
 				now := time.Now()
-				if now.Sub(s.getAccessTime()) > SESSION_CLEANUP_INTERVAL {
+				if now.Sub(s.getAccessTime()) > constants.SESSION_CLEANUP_INTERVAL {
 
 					log.WithFields(log.Fields{
 						"session-id": k,
@@ -202,12 +203,12 @@ func cleanupSessions() {
 
 					ch := make(chan *Res)
 					s.in <- &Req{
-						code:    CMD_CLEANUP,
+						code:    constants.CMD_CLEANUP,
 						resChan: ch,
 					}
 
 					res := <-ch
-					if res.code == ERROR {
+					if res.code == constants.ERROR {
 						//TODO: What are we going to do here?
 						log.WithFields(log.Fields{
 							"session-id": k,
@@ -266,15 +267,15 @@ func Query(ctx context.Context, sid string, query string) (string, error) {
 	ch := make(chan *Res)
 	s.in <- &Req{
 		ctx:     ctx,
-		code:    CMD_QUERY,
+		code:    constants.CMD_QUERY,
 		data:    query,
 		resChan: ch,
 	}
 
-	utils.Dbg(ctx, fmt.Sprintf("%s Send CMD_QUERY for %s", s.id, query))
+	utils.Dbg(ctx, fmt.Sprintf("%s Send constants.CMD_QUERY for %s", s.id, query))
 
 	res := <-ch
-	if res.code == ERROR {
+	if res.code == constants.ERROR {
 		return "", res.data.(error)
 	}
 
@@ -295,7 +296,7 @@ func Fetch_ws(ctx context.Context, sid string, cid string, ws *websocket.Conn, n
 	ch := make(chan *Res)
 	s.in <- &Req{
 		ctx:  ctx,
-		code: CMD_FETCH_WS,
+		code: constants.CMD_FETCH_WS,
 		data: FetchReq{
 			cid:    cid,
 			n:      n,
@@ -308,7 +309,7 @@ func Fetch_ws(ctx context.Context, sid string, cid string, ws *websocket.Conn, n
 	res := <-ch
 	utils.Dbg(ctx, fmt.Sprintf("FETCH s: %s c: %s code %s\n", s.id, cid, res.code))
 
-	if res.code == ERROR {
+	if res.code == constants.ERROR {
 		return res.data.(error)
 	}
 
@@ -327,7 +328,7 @@ func Fetch(ctx context.Context, sid string, cid string, n int) (*[][]string, boo
 	ch := make(chan *Res)
 	s.in <- &Req{
 		ctx:  ctx,
-		code: CMD_FETCH,
+		code: constants.CMD_FETCH,
 		data: FetchReq{
 			cid: cid,
 			n:   n,
@@ -338,12 +339,12 @@ func Fetch(ctx context.Context, sid string, cid string, n int) (*[][]string, boo
 	res := <-ch
 	utils.Dbg(ctx, fmt.Sprintf("FETCH s: %s c: %s code %s\n", s.id, cid, res.code))
 
-	if res.code == ERROR {
+	if res.code == constants.ERROR {
 		return nil, false, res.data.(error)
 	}
 
 	var eof bool
-	if res.code == EOF {
+	if res.code == constants.EOF {
 		eof = true
 	}
 
@@ -364,12 +365,12 @@ func Execute(ctx context.Context, sid string, query string) (string, error) {
 	ch := make(chan *Res)
 	s.in <- &Req{
 		ctx:     ctx,
-		code:    CMD_EXECUTE,
+		code:    constants.CMD_EXECUTE,
 		data:    query,
 		resChan: ch,
 	}
 
-	utils.Dbg(ctx, fmt.Sprintf("%s Send CMD_EXECUTE for %s", s.id, query))
+	utils.Dbg(ctx, fmt.Sprintf("%s Send constants.CMD_EXECUTE for %s", s.id, query))
 
 	res := <-ch
 	utils.Dbg(ctx, fmt.Sprintf("%s Received Response for %s", s.id, query))
@@ -408,8 +409,8 @@ func createSession(ctx context.Context, dbtype string, dsn string) (*session, er
 		return nil, err
 	}
 
-	pool.SetMaxOpenConns(MAX_OPEN_CONNS)
-	pool.SetMaxIdleConns(MAX_IDLE_CONNS)
+	pool.SetMaxOpenConns(constants.MAX_OPEN_CONNS)
+	pool.SetMaxIdleConns(constants.MAX_IDLE_CONNS)
 
 	ctx1, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()

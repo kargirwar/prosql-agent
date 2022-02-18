@@ -24,6 +24,7 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/kargirwar/prosql-agent/constants"
 	"github.com/kargirwar/prosql-agent/utils"
 )
 
@@ -32,13 +33,13 @@ func sessionHandler(ctx context.Context, s *session) {
 	utils.Dbg(ctx, fmt.Sprintf("Starting session handler for %s\n", s.id))
 	defer s.pool.Close()
 
-	ticker := time.NewTicker(CURSOR_CLEANUP_INTERVAL)
+	ticker := time.NewTicker(constants.CURSOR_CLEANUP_INTERVAL)
 
 loop:
 	for {
 		select {
 		case req := <-s.in:
-			if req.code == CMD_CLEANUP {
+			if req.code == constants.CMD_CLEANUP {
 				utils.Dbg(ctx, fmt.Sprintf("Shutting down session handler for %s\n", s.id))
 				handleCleanup(ctx, s, req)
 				break loop
@@ -51,7 +52,7 @@ loop:
 	}
 }
 
-//cleanup cursors which have not been accessed for CURSOR_CLEANUP_INTERVAL
+//cleanup cursors which have not been accessed for constants.CURSOR_CLEANUP_INTERVAL
 func cleanupCursors(ctx context.Context, s *session) {
 	utils.Dbg(ctx, fmt.Sprintf("%s: Starting cleanup", s.id))
 	keys := s.cursorStore.getKeys()
@@ -64,7 +65,7 @@ func cleanupCursors(ctx context.Context, s *session) {
 		}
 
 		now := time.Now()
-		if now.Sub(c.getAccessTime()) > CURSOR_CLEANUP_INTERVAL {
+		if now.Sub(c.getAccessTime()) > constants.CURSOR_CLEANUP_INTERVAL {
 			utils.Dbg(ctx, fmt.Sprintf("%s: Cleaning up cursor: %s\n", s.id, k))
 			//This will handle both cases: either the cursor is in the middle of a query
 			//or waiting for a command from session handler
@@ -84,29 +85,29 @@ func handleSessionRequest(ctx context.Context, s *session, req *Req) {
 
 	s.setAccessTime()
 	switch req.code {
-	case CMD_SET_DB:
+	case constants.CMD_SET_DB:
 		handleSetDb(s, req)
 
-	case CMD_QUERY:
+	case constants.CMD_QUERY:
 		handleQuery(s, req)
 
-	case CMD_EXECUTE:
+	case constants.CMD_EXECUTE:
 		handleExecute(s, req)
 
-	case CMD_FETCH:
+	case constants.CMD_FETCH:
 		handleFetch(s, req)
 
-	case CMD_FETCH_WS:
+	case constants.CMD_FETCH_WS:
 		handleFetch_ws(s, req)
 
-	case CMD_CANCEL:
+	case constants.CMD_CANCEL:
 		handleCancel(s, req)
 	}
 }
 
 //cleanup cursors *unconditionally*
 func handleCleanup(ctx context.Context, s *session, req *Req) {
-	utils.Dbg(ctx, fmt.Sprintf("%s: Handling CMD_CLEANUP\n", s.id))
+	utils.Dbg(ctx, fmt.Sprintf("%s: Handling constants.CMD_CLEANUP\n", s.id))
 
 	keys := s.cursorStore.getKeys()
 	for _, k := range keys {
@@ -127,22 +128,22 @@ func handleCleanup(ctx context.Context, s *session, req *Req) {
 	}
 
 	req.resChan <- &Res{
-		code: CLEANUP_DONE,
+		code: constants.CLEANUP_DONE,
 	}
 
-	utils.Dbg(ctx, fmt.Sprintf("%s: Done CMD_CLEANUP\n", s.id))
+	utils.Dbg(ctx, fmt.Sprintf("%s: Done constants.CMD_CLEANUP\n", s.id))
 }
 
 func handleSetDb(s *session, req *Req) {
 	db, _ := req.data.(string)
-	utils.Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_SET_DB for: %s\n", s.id, db))
+	utils.Dbg(req.ctx, fmt.Sprintf("%s: Handling constants.CMD_SET_DB for: %s\n", s.id, db))
 	//clear all existing cursors
 	cleanupCursors(req.ctx, s)
 
 	rows, err := s.pool.QueryContext(context.Background(), "use `"+db+"`")
 	if err != nil {
 		req.resChan <- &Res{
-			code: ERROR,
+			code: constants.ERROR,
 			data: err,
 		}
 
@@ -152,48 +153,48 @@ func handleSetDb(s *session, req *Req) {
 	rows.Close()
 
 	req.resChan <- &Res{
-		code: SUCCESS,
+		code: constants.SUCCESS,
 	}
 
-	utils.Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_SET_DB for: %s\n", s.id, db))
+	utils.Dbg(req.ctx, fmt.Sprintf("%s: Done constants.CMD_SET_DB for: %s\n", s.id, db))
 }
 
 func handleQuery(s *session, req *Req) {
 	defer utils.TimeTrack(req.ctx, time.Now())
 
 	query, _ := req.data.(string)
-	utils.Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_QUERY for: %s\n", s.id, query))
+	utils.Dbg(req.ctx, fmt.Sprintf("%s: Handling constants.CMD_QUERY for: %s\n", s.id, query))
 
 	c := NewQueryCursor(req.ctx, query)
 	s.cursorStore.set(c.id, c)
 
-	utils.Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_QUERY for: %s\n", s.id, query))
+	utils.Dbg(req.ctx, fmt.Sprintf("%s: Done constants.CMD_QUERY for: %s\n", s.id, query))
 
 	req.resChan <- &Res{
-		code: SUCCESS,
+		code: constants.SUCCESS,
 		data: c.id,
 	}
 
-	utils.Dbg(req.ctx, fmt.Sprintf("%s: Sent Response CMD_QUERY for: %s\n", s.id, query))
+	utils.Dbg(req.ctx, fmt.Sprintf("%s: Sent Response constants.CMD_QUERY for: %s\n", s.id, query))
 }
 
 func handleExecute(s *session, req *Req) {
 	defer utils.TimeTrack(req.ctx, time.Now())
 
 	query, _ := req.data.(string)
-	utils.Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_EXECUTE for: %s\n", s.id, query))
+	utils.Dbg(req.ctx, fmt.Sprintf("%s: Handling constants.CMD_EXECUTE for: %s\n", s.id, query))
 
 	c := NewExecuteCursor(req.ctx, query)
 	s.cursorStore.set(c.id, c)
 
-	utils.Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_EXECUTE for: %s\n", s.id, query))
+	utils.Dbg(req.ctx, fmt.Sprintf("%s: Done constants.CMD_EXECUTE for: %s\n", s.id, query))
 
 	req.resChan <- &Res{
-		code: SUCCESS,
+		code: constants.SUCCESS,
 		data: c.id,
 	}
 
-	utils.Dbg(req.ctx, fmt.Sprintf("%s: Sent Response CMD_EXECUTE for: %s\n", s.id, query))
+	utils.Dbg(req.ctx, fmt.Sprintf("%s: Sent Response constants.CMD_EXECUTE for: %s\n", s.id, query))
 }
 
 func handleFetch_ws(s *session, req *Req) {
@@ -203,7 +204,7 @@ func handleFetch_ws(s *session, req *Req) {
 
 	if err != nil {
 		req.resChan <- &Res{
-			code: ERROR,
+			code: constants.ERROR,
 			data: err,
 		}
 		return
@@ -213,13 +214,13 @@ func handleFetch_ws(s *session, req *Req) {
 
 	if err != nil {
 		req.resChan <- &Res{
-			code: ERROR,
+			code: constants.ERROR,
 			data: err,
 		}
 		return
 	}
 
-	utils.Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_FETCH_WS for: %s\n", s.id, c.id))
+	utils.Dbg(req.ctx, fmt.Sprintf("%s: Handling constants.CMD_FETCH_WS for: %s\n", s.id, c.id))
 
 	//star a timer which will keep updating accesstime, so that
 	//it does not get cleaned up. This is useful for long running queries
@@ -233,8 +234,8 @@ func handleFetch_ws(s *session, req *Req) {
 	//stop accesstimer
 	cancel()
 
-	utils.Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_FETCH_WS for: %s with code: %s\n", s.id, c.id, res.code))
-	if res.code == ERROR || res.code == EOF {
+	utils.Dbg(req.ctx, fmt.Sprintf("%s: Done constants.CMD_FETCH_WS for: %s with code: %s\n", s.id, c.id, res.code))
+	if res.code == constants.ERROR || res.code == constants.EOF {
 		utils.Dbg(req.ctx, fmt.Sprintf("%s: clearing cursor %s\n", s.id, c.id))
 		s.cursorStore.clear(c.id)
 	}
@@ -248,7 +249,7 @@ func handleFetch(s *session, req *Req) {
 
 	if err != nil {
 		req.resChan <- &Res{
-			code: ERROR,
+			code: constants.ERROR,
 			data: err,
 		}
 		return
@@ -260,27 +261,27 @@ func handleFetch(s *session, req *Req) {
 
 		if err != nil {
 			req.resChan <- &Res{
-				code: ERROR,
+				code: constants.ERROR,
 				data: err,
 			}
 			s.cursorStore.clear(c.id)
 			return
 		}
 
-		utils.Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_FETCH for: %s\n", c.id))
+		utils.Dbg(req.ctx, fmt.Sprintf("%s: Done constants.CMD_FETCH for: %s\n", c.id))
 
 		var results [][]string
 		r := []string{"rows-affected", fmt.Sprintf("%d", n)}
 		results = append(results, r)
 
 		req.resChan <- &Res{
-			code: SUCCESS,
+			code: constants.SUCCESS,
 			data: &results,
 		}
 
 		s.cursorStore.clear(c.id)
 
-		utils.Dbg(req.ctx, fmt.Sprintf("%s: Sent Response CMD_FETCH for: %s\n", c.id))
+		utils.Dbg(req.ctx, fmt.Sprintf("%s: Sent Response constants.CMD_FETCH for: %s\n", c.id))
 		return
 	}
 
@@ -289,20 +290,20 @@ func handleFetch(s *session, req *Req) {
 
 	if err != nil {
 		req.resChan <- &Res{
-			code: ERROR,
+			code: constants.ERROR,
 			data: err,
 		}
 		return
 	}
 
-	utils.Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_FETCH for: %s\n", s.id, c.id))
+	utils.Dbg(req.ctx, fmt.Sprintf("%s: Handling constants.CMD_FETCH for: %s\n", s.id, c.id))
 
 	//send fetch request to cursor
 	c.in <- req
 	res := <-c.out
 
-	utils.Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_FETCH for: %s with code: %s\n", s.id, c.id, res.code))
-	if res.code == ERROR || res.code == EOF {
+	utils.Dbg(req.ctx, fmt.Sprintf("%s: Done constants.CMD_FETCH for: %s with code: %s\n", s.id, c.id, res.code))
+	if res.code == constants.ERROR || res.code == constants.EOF {
 		utils.Dbg(req.ctx, fmt.Sprintf("%s: clearing cursor %s\n", s.id, c.id))
 		s.cursorStore.clear(c.id)
 	}
@@ -313,11 +314,11 @@ func handleCancel(s *session, req *Req) {
 	cid := req.data.(string)
 	c, err := s.cursorStore.get(cid)
 
-	utils.Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_CANCEL for: %s\n", s.id, c.id))
+	utils.Dbg(req.ctx, fmt.Sprintf("%s: Handling constants.CMD_CANCEL for: %s\n", s.id, c.id))
 
 	if err != nil {
 		req.resChan <- &Res{
-			code: ERROR,
+			code: constants.ERROR,
 			data: err,
 		}
 		return
@@ -327,7 +328,7 @@ func handleCancel(s *session, req *Req) {
 	s.cursorStore.clear(cid)
 
 	req.resChan <- &Res{
-		code: SUCCESS,
+		code: constants.SUCCESS,
 	}
-	utils.Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_CANCEL for: %s\n", s.id, c.id))
+	utils.Dbg(req.ctx, fmt.Sprintf("%s: Done constants.CMD_CANCEL for: %s\n", s.id, c.id))
 }

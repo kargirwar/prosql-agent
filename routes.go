@@ -32,6 +32,7 @@ import (
 
 	"github.com/denisbrodbeck/machineid"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/kargirwar/prosql-agent/constants"
 	"github.com/kargirwar/prosql-agent/utils"
 )
 
@@ -82,7 +83,7 @@ func getDsn(r *http.Request) (dsn string, err error) {
 func about(w http.ResponseWriter, r *http.Request) {
 	defer utils.TimeTrack(r.Context(), time.Now())
 
-	id, err := machineid.ProtectedID(APP_NAME)
+	id, err := machineid.ProtectedID(constants.APP_NAME)
 	if err != nil {
 		id = "not-available"
 	}
@@ -93,7 +94,7 @@ func about(w http.ResponseWriter, r *http.Request) {
 		ID      string `json:"device-id"`
 		Version string `json:"version"`
 		OS      string `json:"os"`
-	}{id, VERSION, OS}, false)
+	}{id, constants.VERSION, constants.OS}, false)
 }
 
 func ping(w http.ResponseWriter, r *http.Request) {
@@ -101,14 +102,14 @@ func ping(w http.ResponseWriter, r *http.Request) {
 
 	dsn, err := getDsn(r)
 	if err != nil {
-		utils.SendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
+		utils.SendError(r.Context(), w, err, constants.ERR_INVALID_USER_INPUT)
 		return
 	}
 
 	var pool *sql.DB // Database connection pool.
 	pool, err = sql.Open("mysql", dsn)
 	if err != nil {
-		utils.SendError(r.Context(), w, err, ERR_DB_ERROR)
+		utils.SendError(r.Context(), w, err, constants.ERR_DB_ERROR)
 		return
 	}
 	defer pool.Close()
@@ -117,7 +118,7 @@ func ping(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if err := pool.PingContext(ctx); err != nil {
-		utils.SendError(r.Context(), w, err, ERR_DB_ERROR)
+		utils.SendError(r.Context(), w, err, constants.ERR_DB_ERROR)
 		return
 	}
 
@@ -129,13 +130,13 @@ func login(w http.ResponseWriter, r *http.Request) {
 
 	dsn, err := getDsn(r)
 	if err != nil {
-		utils.SendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
+		utils.SendError(r.Context(), w, err, constants.ERR_INVALID_USER_INPUT)
 		return
 	}
 
 	sid, err := NewSession(r.Context(), "mysql", dsn)
 	if err != nil {
-		utils.SendError(r.Context(), w, err, ERR_DB_ERROR)
+		utils.SendError(r.Context(), w, err, constants.ERR_DB_ERROR)
 		return
 	}
 
@@ -152,14 +153,14 @@ func cancel(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		utils.Dbg(ctx, fmt.Sprintf("%s", err.Error()))
-		utils.SendError(ctx, w, err, ERR_INVALID_USER_INPUT)
+		utils.SendError(ctx, w, err, constants.ERR_INVALID_USER_INPUT)
 		return
 	}
 
 	err = Cancel(ctx, sid, cid)
 	if err != nil {
 		utils.Dbg(ctx, fmt.Sprintf("%s", err.Error()))
-		utils.SendError(ctx, w, err, ERR_INVALID_USER_INPUT)
+		utils.SendError(ctx, w, err, constants.ERR_INVALID_USER_INPUT)
 		return
 	}
 
@@ -173,14 +174,14 @@ func query(w http.ResponseWriter, r *http.Request) {
 	sid, query, err := getQueryParams(r)
 
 	if err != nil {
-		utils.SendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
+		utils.SendError(r.Context(), w, err, constants.ERR_INVALID_USER_INPUT)
 		return
 	}
 
 	cid, err := Query(r.Context(), sid, query)
 
 	if err != nil {
-		utils.SendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
+		utils.SendError(r.Context(), w, err, constants.ERR_INVALID_USER_INPUT)
 		return
 	}
 
@@ -196,14 +197,14 @@ func execute(w http.ResponseWriter, r *http.Request) {
 	sid, query, err := getQueryParams(r)
 
 	if err != nil {
-		utils.SendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
+		utils.SendError(r.Context(), w, err, constants.ERR_INVALID_USER_INPUT)
 		return
 	}
 
 	cid, err := Execute(r.Context(), sid, query)
 
 	if err != nil {
-		utils.SendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
+		utils.SendError(r.Context(), w, err, constants.ERR_INVALID_USER_INPUT)
 		return
 	}
 
@@ -218,14 +219,14 @@ func fetch(w http.ResponseWriter, r *http.Request) {
 	sid, cid, n, err := getFetchParams(r)
 
 	if err != nil {
-		utils.SendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
+		utils.SendError(r.Context(), w, err, constants.ERR_INVALID_USER_INPUT)
 		return
 	}
 
 	rows, eof, err := Fetch(r.Context(), sid, cid, n)
 
 	if err != nil {
-		utils.SendError(r.Context(), w, err, ERR_DB_ERROR)
+		utils.SendError(r.Context(), w, err, constants.ERR_DB_ERROR)
 		return
 	}
 
@@ -247,14 +248,14 @@ func fetch_ws(w http.ResponseWriter, r *http.Request) {
 	params, err := getFetchParams_ws(r)
 
 	if err != nil {
-		utils.SendError(r.Context(), w, err, ERR_INVALID_USER_INPUT)
+		utils.SendError(r.Context(), w, err, constants.ERR_INVALID_USER_INPUT)
 		return
 	}
 
 	err = Fetch_ws(ctx, params.SessionId, params.CursorId, ws, params.NumOfRows, params.Export)
 
 	if err != nil {
-		utils.SendError_ws(ctx, ws, err, ERR_INVALID_USER_INPUT)
+		utils.SendError_ws(ctx, ws, err, constants.ERR_INVALID_USER_INPUT)
 		return
 	}
 }
