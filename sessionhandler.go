@@ -209,7 +209,7 @@ func handleFetch_ws(s *session, req *Req) {
 		return
 	}
 
-	err = c.start(req.ctx, s)
+	err = c.start(req.ctx, s.pool)
 
 	if err != nil {
 		req.resChan <- &Res{
@@ -255,10 +255,8 @@ func handleFetch(s *session, req *Req) {
 	}
 
 	if c.isExecute() {
-		//debug
-		//time.Sleep(10 * time.Second)
 		//if this is execute type return result immediately
-		n, err := c.exec(req.ctx, s)
+		n, err := c.exec(req.ctx, s.pool)
 
 		if err != nil {
 			req.resChan <- &Res{
@@ -287,7 +285,7 @@ func handleFetch(s *session, req *Req) {
 	}
 
 	//otherwise let cursorhandler take care of this
-	err = c.start(req.ctx, s)
+	err = c.start(req.ctx, s.pool)
 
 	if err != nil {
 		req.resChan <- &Res{

@@ -21,7 +21,7 @@ package main
 import "time"
 
 //build options
-var VERSION = "VERSION"
+var VERSION = "0.6.3"
 var OS = "OS"
 
 const APP_NAME = "prosql-agent"
