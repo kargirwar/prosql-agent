@@ -107,32 +107,11 @@ func (pc *cursor) exec(ctx context.Context, db *sql.DB) (int64, error) {
 	return rows, nil
 }
 
-func (pc *cursor) getId() string {
-	pc.mutex.Lock()
-	defer pc.mutex.Unlock()
-
-	return pc.id
-}
-
 func (pc *cursor) isExecute() bool {
 	pc.mutex.Lock()
 	defer pc.mutex.Unlock()
 
 	return pc.execute
-}
-
-func (pc *cursor) setAccessTime() {
-	pc.mutex.Lock()
-	defer pc.mutex.Unlock()
-
-	pc.accessTime = time.Now()
-}
-
-func (pc *cursor) getAccessTime() time.Time {
-	pc.mutex.Lock()
-	defer pc.mutex.Unlock()
-
-	return pc.accessTime
 }
 
 type cursors struct {
@@ -236,13 +215,8 @@ loop:
 	for {
 		select {
 		case req := <-c.in:
-			ctx, cancel := context.WithCancel(req.ctx)
-			go startTimer(ctx, c)
-
 			res := handleCursorRequest(c, req)
 			c.out <- res
-
-			cancel()
 
 			if res.code == constants.ERROR || res.code == constants.EOF {
 				//Whatever the error we should exit
