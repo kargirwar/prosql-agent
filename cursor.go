@@ -36,7 +36,6 @@ import (
 	"github.com/dchest/uniuri"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/websocket"
-	"github.com/kargirwar/prosql-agent/constants"
 	"github.com/kargirwar/prosql-agent/utils"
 )
 
@@ -132,7 +131,7 @@ func (pc *cursors) get(cid string) (*cursor, error) {
 
 	c, present := pc.store[cid]
 	if !present {
-		return nil, errors.New(constants.ERR_INVALID_CURSOR_ID)
+		return nil, errors.New(ERR_INVALID_CURSOR_ID)
 	}
 
 	if c.err != nil {
@@ -218,7 +217,7 @@ loop:
 			res := handleCursorRequest(c, req)
 			c.out <- res
 
-			if res.code == constants.ERROR || res.code == constants.EOF {
+			if res.code == ERROR || res.code == EOF {
 				//Whatever the error we should exit
 				utils.Dbg(req.ctx, fmt.Sprintf("%s: Shutting down cursorHandler due to %s\n", c.id, res.code))
 				break loop
@@ -235,59 +234,59 @@ func handleCursorRequest(c *cursor, req *Req) *Res {
 	defer utils.TimeTrack(req.ctx, time.Now())
 
 	switch req.code {
-	case constants.CMD_FETCH_WS:
+	case CMD_FETCH_WS:
 		return handle_ws(c, req)
 
-	case constants.CMD_FETCH:
+	case CMD_FETCH:
 		return handle_ajax(c, req)
 
 	default:
 		utils.Dbg(req.ctx, fmt.Sprintf("%s: Invalid Command\n", c.id))
 		return &Res{
-			code: constants.ERROR,
-			data: errors.New(constants.ERR_INVALID_CURSOR_CMD),
+			code: ERROR,
+			data: errors.New(ERR_INVALID_CURSOR_CMD),
 		}
 	}
 }
 
 func handle_ws(c *cursor, req *Req) *Res {
-	utils.Dbg(req.ctx, fmt.Sprintf("%s: Handling constants.CMD_FETCH_WS\n", c.id))
+	utils.Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_FETCH_WS\n", c.id))
 	fetchReq, _ := req.data.(FetchReq)
 	err := fetchRows_ws(req.ctx, c, fetchReq)
 	if err != nil {
 		utils.Dbg(req.ctx, fmt.Sprintf("%s: %s\n", c.id, err.Error()))
 		return &Res{
-			code: constants.ERROR,
+			code: ERROR,
 			data: err,
 		}
 	}
 
-	utils.Dbg(req.ctx, fmt.Sprintf("%s: Done constants.CMD_FETCH\n", c.id))
+	utils.Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_FETCH\n", c.id))
 
 	return &Res{
-		code: constants.SUCCESS,
+		code: SUCCESS,
 	}
 }
 
 func handle_ajax(c *cursor, req *Req) *Res {
-	utils.Dbg(req.ctx, fmt.Sprintf("%s: Handling constants.CMD_FETCH\n", c.id))
+	utils.Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_FETCH\n", c.id))
 	fetchReq, _ := req.data.(FetchReq)
 	rows, err := fetchRows(req.ctx, c, fetchReq)
 	if err != nil {
 		utils.Dbg(req.ctx, fmt.Sprintf("%s: %s\n", c.id, err.Error()))
 		return &Res{
-			code: constants.ERROR,
+			code: ERROR,
 			data: err,
 		}
 	}
 
-	utils.Dbg(req.ctx, fmt.Sprintf("%s: Done constants.CMD_FETCH\n", c.id))
+	utils.Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_FETCH\n", c.id))
 
 	var code string
 	if len(*rows) < fetchReq.n {
-		code = constants.EOF
+		code = EOF
 	} else {
-		code = constants.SUCCESS
+		code = SUCCESS
 	}
 
 	return &Res{
@@ -330,7 +329,7 @@ func getHomeDir() (string, error) {
 
 func fetchRows_ws(ctx context.Context, c *cursor, fetchReq FetchReq) error {
 	if fetchReq.cid != c.id {
-		return errors.New(constants.ERR_INVALID_CURSOR_ID)
+		return errors.New(ERR_INVALID_CURSOR_ID)
 	}
 
 	cols, err := c.rows.Columns()
@@ -471,7 +470,7 @@ func processRow(ctx context.Context, cursorId string, row []string, currRow int,
 
 func fetchRows(ctx context.Context, c *cursor, fetchReq FetchReq) (*[][]string, error) {
 	if fetchReq.cid != c.id {
-		return nil, errors.New(constants.ERR_INVALID_CURSOR_ID)
+		return nil, errors.New(ERR_INVALID_CURSOR_ID)
 	}
 
 	ws := fetchReq.ws

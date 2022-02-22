@@ -230,7 +230,7 @@ func testFetch(t *testing.T, queries []string) {
 
 		t.Logf("%s: Received %d rows", sid, len(*rows))
 		if eof == true {
-			t.Logf("%s: Breaking due to constants.EOF", sid)
+			t.Logf("%s: Breaking due to EOF", sid)
 			break
 		}
 	}
@@ -280,7 +280,7 @@ func testCancel(t *testing.T, queries []string) {
 
 		t.Logf("%s: Received %d rows", sid, len(*rows))
 		if eof == true {
-			t.Logf("%s: Breaking due to constants.EOF", sid)
+			t.Logf("%s: Breaking due to EOF", sid)
 			break
 		}
 	}
@@ -309,7 +309,7 @@ func TestFetchAfterEof(t *testing.T) {
 		_, eof, _ := Fetch(ctx, sid, cid, N)
 
 		if eof == true {
-			t.Logf("%s: Testing fetch after constants.EOF", sid)
+			t.Logf("%s: Testing fetch after EOF", sid)
 			Fetch(ctx, sid, cid, N)
 			break
 		}

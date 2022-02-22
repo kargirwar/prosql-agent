@@ -29,7 +29,6 @@ import (
 
 	"github.com/gorilla/mux"
 	_ "github.com/gorilla/websocket"
-	"github.com/kargirwar/prosql-agent/constants"
 	"github.com/kargirwar/prosql-agent/utils"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -102,9 +101,9 @@ func main() {
 
 	http.Handle("/", r)
 
-	log.Info("prosql-agent Listening at:" + strconv.Itoa(constants.PORT))
+	log.Info("prosql-agent Listening at:" + strconv.Itoa(PORT))
 
-	if err := http.ListenAndServe(":"+strconv.Itoa(constants.PORT), nil); err != nil {
+	if err := http.ListenAndServe(":"+strconv.Itoa(PORT), nil); err != nil {
 		log.Fatal(err.Error())
 		os.Exit(-1)
 	}
