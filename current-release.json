@@ -1,5 +1,5 @@
 {
-  "version": "0.6.2",
+  "version": "0.6.3-mac",
   "mac": "https://github.com/kargirwar/prosql-agent/releases/download/0.6.3-rc/prosql-agent-v0.6.3-mac.zip",
   "linux": "https://github.com/kargirwar/prosql-agent/releases/download/v0.6.2/prosql-agent-v0.6.2-linux.zip",
   "windows": "https://github.com/kargirwar/prosql-agent/releases/download/v0.6.2/prosql-agent-v0.6.2-windows.zip"
