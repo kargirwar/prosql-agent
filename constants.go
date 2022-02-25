@@ -22,6 +22,7 @@ import "time"
 
 //build options
 var VERSION = "0.6.3"
+var ALLOW = "https://prosql.io"
 var OS = "OS"
 
 const APP_NAME = "prosql-agent"
