@@ -56,7 +56,7 @@ type cursor struct {
 	execute    bool
 }
 
-func (pc *cursor) start(ctx context.Context, s *session) error {
+func (pc *cursor) start(ctx context.Context, db *sql.DB) error {
 	defer utils.TimeTrack(ctx, time.Now())
 
 	pc.mutex.Lock()
@@ -69,7 +69,7 @@ func (pc *cursor) start(ctx context.Context, s *session) error {
 
 	utils.Dbg(ctx, "Starting query: "+pc.query)
 
-	rows, err := s.pool.QueryContext(pc.ctx, pc.query)
+	rows, err := db.QueryContext(pc.ctx, pc.query)
 	if err != nil {
 		pc.err = err
 		return err
@@ -81,7 +81,7 @@ func (pc *cursor) start(ctx context.Context, s *session) error {
 	return nil
 }
 
-func (pc *cursor) exec(ctx context.Context, s *session) (int64, error) {
+func (pc *cursor) exec(ctx context.Context, db *sql.DB) (int64, error) {
 	defer utils.TimeTrack(ctx, time.Now())
 
 	pc.mutex.Lock()
@@ -89,7 +89,7 @@ func (pc *cursor) exec(ctx context.Context, s *session) (int64, error) {
 
 	utils.Dbg(ctx, "Starting query: "+pc.query)
 
-	result, err := s.pool.ExecContext(pc.ctx, pc.query)
+	result, err := db.ExecContext(pc.ctx, pc.query)
 	if err != nil {
 		pc.err = err
 		return -1, err
@@ -106,32 +106,11 @@ func (pc *cursor) exec(ctx context.Context, s *session) (int64, error) {
 	return rows, nil
 }
 
-func (pc *cursor) getId() string {
-	pc.mutex.Lock()
-	defer pc.mutex.Unlock()
-
-	return pc.id
-}
-
 func (pc *cursor) isExecute() bool {
 	pc.mutex.Lock()
 	defer pc.mutex.Unlock()
 
 	return pc.execute
-}
-
-func (pc *cursor) setAccessTime() {
-	pc.mutex.Lock()
-	defer pc.mutex.Unlock()
-
-	pc.accessTime = time.Now()
-}
-
-func (pc *cursor) getAccessTime() time.Time {
-	pc.mutex.Lock()
-	defer pc.mutex.Unlock()
-
-	return pc.accessTime
 }
 
 type cursors struct {
@@ -235,13 +214,8 @@ loop:
 	for {
 		select {
 		case req := <-c.in:
-			ctx, cancel := context.WithCancel(req.ctx)
-			go startTimer(ctx, c)
-
 			res := handleCursorRequest(c, req)
 			c.out <- res
-
-			cancel()
 
 			if res.code == ERROR || res.code == EOF {
 				//Whatever the error we should exit

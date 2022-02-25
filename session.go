@@ -53,27 +53,6 @@ type session struct {
 	mutex       sync.Mutex
 }
 
-func (ps *session) getId() string {
-	ps.mutex.Lock()
-	defer ps.mutex.Unlock()
-
-	return ps.id
-}
-
-func (ps *session) setAccessTime() {
-	ps.mutex.Lock()
-	defer ps.mutex.Unlock()
-
-	ps.accessTime = time.Now()
-}
-
-func (ps *session) getAccessTime() time.Time {
-	ps.mutex.Lock()
-	defer ps.mutex.Unlock()
-
-	return ps.accessTime
-}
-
 func (ps *session) String() string {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
@@ -82,6 +61,18 @@ func (ps *session) String() string {
 	return fmt.Sprintf("max %d open %d inuse %d idle %d wc %d wd %s maxclosed %d",
 		stats.MaxOpenConnections, stats.OpenConnections, stats.InUse, stats.Idle,
 		stats.WaitCount, stats.WaitDuration, stats.MaxIdleClosed)
+}
+
+func (ps *session) getAccessTime() time.Time {
+	ps.mutex.Lock()
+	defer ps.mutex.Unlock()
+	return ps.accessTime
+}
+
+func (ps *session) setAccessTime() {
+	ps.mutex.Lock()
+	defer ps.mutex.Unlock()
+	ps.accessTime = time.Now()
 }
 
 type sessions struct {

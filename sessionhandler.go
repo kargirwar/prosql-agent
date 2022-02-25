@@ -24,6 +24,7 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/kargirwar/prosql-agent/accesstimer"
 	"github.com/kargirwar/prosql-agent/utils"
 )
 
@@ -64,7 +65,7 @@ func cleanupCursors(ctx context.Context, s *session) {
 		}
 
 		now := time.Now()
-		if now.Sub(c.getAccessTime()) > CURSOR_CLEANUP_INTERVAL {
+		if now.Sub(accesstimer.GetAccessTime(c.id)) > CURSOR_CLEANUP_INTERVAL {
 			utils.Dbg(ctx, fmt.Sprintf("%s: Cleaning up cursor: %s\n", s.id, k))
 			//This will handle both cases: either the cursor is in the middle of a query
 			//or waiting for a command from session handler
@@ -83,6 +84,7 @@ func handleSessionRequest(ctx context.Context, s *session, req *Req) {
 	defer utils.TimeTrack(req.ctx, time.Now())
 
 	s.setAccessTime()
+
 	switch req.code {
 	case CMD_SET_DB:
 		handleSetDb(s, req)
@@ -209,7 +211,10 @@ func handleFetch_ws(s *session, req *Req) {
 		return
 	}
 
-	err = c.start(req.ctx, s)
+	accesstimer.Start(c.id)
+	defer accesstimer.Cancel(c.id)
+
+	err = c.start(req.ctx, s.pool)
 
 	if err != nil {
 		req.resChan <- &Res{
@@ -221,17 +226,9 @@ func handleFetch_ws(s *session, req *Req) {
 
 	utils.Dbg(req.ctx, fmt.Sprintf("%s: Handling CMD_FETCH_WS for: %s\n", s.id, c.id))
 
-	//star a timer which will keep updating accesstime, so that
-	//it does not get cleaned up. This is useful for long running queries
-	ctx, cancel := context.WithCancel(req.ctx)
-	go startTimer(ctx, s)
-
 	//send fetch request to cursor
 	c.in <- req
 	res := <-c.out
-
-	//stop accesstimer
-	cancel()
 
 	utils.Dbg(req.ctx, fmt.Sprintf("%s: Done CMD_FETCH_WS for: %s with code: %s\n", s.id, c.id, res.code))
 	if res.code == ERROR || res.code == EOF {
@@ -255,10 +252,11 @@ func handleFetch(s *session, req *Req) {
 	}
 
 	if c.isExecute() {
-		//debug
-		//time.Sleep(10 * time.Second)
 		//if this is execute type return result immediately
-		n, err := c.exec(req.ctx, s)
+		accesstimer.Start(c.id)
+		defer accesstimer.Cancel(c.id)
+
+		n, err := c.exec(req.ctx, s.pool)
 
 		if err != nil {
 			req.resChan <- &Res{
@@ -287,7 +285,10 @@ func handleFetch(s *session, req *Req) {
 	}
 
 	//otherwise let cursorhandler take care of this
-	err = c.start(req.ctx, s)
+	accesstimer.Start(c.id)
+	defer accesstimer.Cancel(c.id)
+
+	err = c.start(req.ctx, s.pool)
 
 	if err != nil {
 		req.resChan <- &Res{
