@@ -74,7 +74,13 @@ func getLogFileName() string {
 
 	//OSX
 	if runtime.GOOS == "darwin" {
-		return home + "/Library/ProsqlAgent/" + LOG_FILE
+		path := home + "/Library/ProsqlAgent"
+		err := os.MkdirAll(path, 0700)
+		if err != nil {
+			return LOG_FILE
+		}
+		return filepath.Join(path, LOG_FILE)
+
 	}
 
 	return LOG_FILE
