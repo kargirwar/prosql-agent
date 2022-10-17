@@ -1,5 +1,5 @@
 # prosql-agent
-This is the desktop agent required for prosql.io
+This is the desktop agent required for https://prosql.io
 # Building
 Mac: go build -ldflags="-X 'main.VERSION=0.6.4' -X 'main.ALLOW=https://prosql.io' -X 'main.OS=mac'"
 
